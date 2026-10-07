@@ -1,0 +1,8 @@
+allowBuilds:
+  esbuild: true
+
+# Without this, pnpm 12 prepends an env document to pnpm-lock.yaml, and GitHub's
+# dependency graph reads only that first document, hiding every dependency from
+# Dependabot alerts: https://github.com/dependabot/dependabot-core/issues/15904
+# Side effect: pnpm no longer switches itself to the packageManager version.
+pmOnFail: ignore

@@ -14,13 +14,13 @@ copilotview does not call an LLM to produce summaries. Instead, it gathers and d
 
 ## Requirements
 
-Node.js 24 or later. copilotview uses the built-in `node:sqlite` module, so there are no native modules to build.
+Node.js 24 or later and [pnpm](https://pnpm.io/) 12. copilotview uses the built-in `node:sqlite` module, so there are no native modules to build.
 
 ## Setup
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm build
 ```
 
 ## Usage
@@ -55,10 +55,10 @@ Search uses SQLite FTS5 with the trigram tokenizer. This makes Japanese text sea
 ## Development
 
 ```bash
-npm test          # vitest
-npm run typecheck # tsc --noEmit
-npm run lint      # eslint
-npm run dev:web   # Vite dev server (proxies API requests to serve on port 4178)
+pnpm test      # vitest
+pnpm typecheck # tsc --noEmit
+pnpm lint      # eslint
+pnpm dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
 GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then checks that the built CLI's `index`, `stats`, and `serve` commands work.
