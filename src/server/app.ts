@@ -87,7 +87,7 @@ export function createApp(db: Database): Hono {
     });
   } else {
     app.get("/", (c) =>
-      c.text("UI is not built yet. Run `npm run build:web`, or `npm run dev:web` for the dev server.", 503),
+      c.text("UI is not built yet. Run `pnpm build:web`, or `pnpm dev:web` for the dev server.", 503),
     );
   }
 
