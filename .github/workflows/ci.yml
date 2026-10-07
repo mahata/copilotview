@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24, 26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Smoke-test the bundled CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/session-state"
+          node dist/cli.js index --source "$RUNNER_TEMP/session-state" --index "$RUNNER_TEMP/index.db"
+          node dist/cli.js stats --index "$RUNNER_TEMP/index.db"
+          node dist/cli.js serve --index "$RUNNER_TEMP/index.db" --port 4178 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          base=http://127.0.0.1:4178
+          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "$base/api/stats"
+          asset=$(curl -fsS "$base/" | grep -o -m1 '/assets/[^"]*\.js')
+          # Unknown paths fall back to index.html, so a 200 alone doesn't prove static serving works.
+          curl -fsS -o /dev/null -w '%{content_type}\n' "$base$asset" | grep javascript
