@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type Database } from "./sqlite";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * `trigram` is the only built-in tokenizer that indexes Japanese text, since
@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   malformed_lines INTEGER NOT NULL DEFAULT 0,
   source_size INTEGER NOT NULL DEFAULT 0,
   source_mtime INTEGER NOT NULL DEFAULT 0,
+  source_fingerprint TEXT NOT NULL,
   indexed_at TEXT NOT NULL
 );
 

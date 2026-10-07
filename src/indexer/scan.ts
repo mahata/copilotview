@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { Database } from "../db/sqlite";
 import { createWriter } from "../db/write";
 import { readCheckpoints, readPlan } from "./checkpoints";
@@ -41,6 +42,30 @@ async function listSessionDirs(root: string): Promise<string[]> {
     .sort();
 }
 
+async function sourceFingerprint(sessionDir: string): Promise<string> {
+  const files = ["events.jsonl", "workspace.yaml", "plan.md"];
+  const checkpointsDir = path.join(sessionDir, "checkpoints");
+  try {
+    const checkpointFiles = await fsp.readdir(checkpointsDir, { withFileTypes: true });
+    for (const entry of checkpointFiles) {
+      if (entry.isFile() || entry.isSymbolicLink()) files.push(path.join("checkpoints", entry.name));
+    }
+  } catch {
+    // A session need not have checkpoints.
+  }
+
+  const hash = createHash("sha256");
+  for (const relative of files.sort()) {
+    try {
+      const stat = await fsp.lstat(path.join(sessionDir, relative));
+      hash.update(`${relative}\0${stat.size}\0${Math.floor(stat.mtimeMs)}\0`);
+    } catch {
+      hash.update(`${relative}\0missing\0`);
+    }
+  }
+  return hash.digest("hex");
+}
+
 export async function indexSessions(
   db: Database,
   sessionStateDir: string,
@@ -48,7 +73,8 @@ export async function indexSessions(
 ): Promise<IndexResult> {
   const startedAt = Date.now();
   const writer = createWriter(db);
-  const known = options.force ? new Map() : writer.knownSources();
+  const persisted = writer.knownSources();
+  const known = options.force ? new Map() : persisted;
   const dirs = await listSessionDirs(sessionStateDir);
   const seen = new Set<string>();
   const batchSize = options.batchSize ?? 50;
@@ -89,8 +115,9 @@ export async function indexSessions(
       seen.add(id);
       const size = stat.size;
       const mtime = Math.floor(stat.mtimeMs);
+      const fingerprint = await sourceFingerprint(dirPath);
       const previous = known.get(id);
-      if (previous && previous.size === size && previous.mtime === mtime) {
+      if (previous && previous.fingerprint === fingerprint) {
         skipped += 1;
         options.onProgress?.({ scanned, total: dirs.length, indexed, skipped, removed: 0, currentId: id });
         continue;
@@ -120,6 +147,7 @@ export async function indexSessions(
         extraArtifacts,
         sourceSize: size,
         sourceMtime: mtime,
+        sourceFingerprint: fingerprint,
       });
       indexed += 1;
 
@@ -129,7 +157,7 @@ export async function indexSessions(
 
     let removed = 0;
     begin();
-    for (const id of known.keys()) {
+    for (const id of persisted.keys()) {
       if (!seen.has(id)) {
         writer.remove(id);
         removed += 1;

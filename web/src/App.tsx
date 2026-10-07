@@ -54,7 +54,7 @@ export function App() {
 
   const update = (patch: Partial<Filters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
-    if (route.view === "session") go("/");
+    if (route.view !== "browse") go("/");
   };
 
   return (

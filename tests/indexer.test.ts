@@ -81,7 +81,7 @@ describe("indexer end to end", () => {
   beforeAll(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-test-"));
     makeSession(root, "aaaa", { repository: "acme/demo", branch: "main", content: "グラフ描画を実装してください" });
-    makeSession(root, "bbbb", { repository: "acme/other", branch: "dev", content: "Fix the flaky test runner" });
+    makeSession(root, "bbbb", { repository: "acme/other", branch: "dev", content: "Fix the flaky test runner for 𠮷野" });
     fs.mkdirSync(path.join(root, "empty-session"), { recursive: true });
     db = openIndex(":memory:");
     await indexSessions(db, root);
@@ -133,6 +133,25 @@ describe("indexer end to end", () => {
     expect(result.hits.map((h) => h.session.id)).toContain("aaaa");
   });
 
+  it("counts Unicode code points when selecting the LIKE fallback", () => {
+    const result = search(db, "𠮷野");
+    expect(result.fallbackTerms).toEqual(["𠮷野"]);
+    expect(result.hits.map((h) => h.session.id)).toContain("bbbb");
+  });
+
+  it("matches and highlights artifact titles", () => {
+    const checkpointIndex = path.join(root, "aaaa", "checkpoints", "index.md");
+    fs.writeFileSync(
+      checkpointIndex,
+      "| # | Title | File |\n|---|---|---|\n| 1 | 題名 | 001-first.md |\n",
+    );
+    return indexSessions(db, root).then(() => {
+      const result = search(db, "題名", { scope: "artifact" });
+      expect(result.fallbackTerms).toEqual(["題名"]);
+      expect(result.hits[0]?.snippet.ranges.length).toBeGreaterThan(0);
+    });
+  });
+
   it("combines indexed and fallback terms with AND", () => {
     expect(search(db, "グラフ描画 実装").total).toBeGreaterThan(0);
     expect(search(db, "グラフ描画 検出").total).toBe(0);
@@ -173,13 +192,20 @@ describe("indexer end to end", () => {
     expect(stats.monthly).toEqual([{ month: "2026-05", count: 2 }]);
   });
 
-  it("skips unchanged sessions on a second run and removes deleted ones", async () => {
+  it("refreshes when non-event inputs change", async () => {
+    const workspace = path.join(root, "aaaa", "workspace.yaml");
+    fs.appendFileSync(workspace, "summary: Updated metadata\n");
+    const result = await indexSessions(db, root);
+    expect(result).toMatchObject({ indexed: 1, skipped: 1 });
+  });
+
+  it("skips unchanged sessions and prunes deleted sessions during a forced run", async () => {
     const second = await indexSessions(db, root);
     expect(second).toMatchObject({ indexed: 0, skipped: 2, removed: 0 });
 
     fs.rmSync(path.join(root, "bbbb"), { recursive: true, force: true });
-    const third = await indexSessions(db, root);
-    expect(third).toMatchObject({ indexed: 0, skipped: 1, removed: 1 });
+    const third = await indexSessions(db, root, { force: true });
+    expect(third).toMatchObject({ indexed: 1, skipped: 0, removed: 1 });
     expect(listSessions(db).total).toBe(1);
     expect(search(db, "flaky").total).toBe(0);
   });

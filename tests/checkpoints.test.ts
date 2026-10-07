@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { flattenCheckpointBody, parseCheckpointIndex } from "../src/indexer/checkpoints";
+import { flattenCheckpointBody, parseCheckpointIndex, readCheckpoints } from "../src/indexer/checkpoints";
 
 const INDEX = `# Checkpoint History
 
@@ -28,6 +31,29 @@ describe("flattenCheckpointBody", () => {
   it("turns xml-ish sections into markdown headings", () => {
     const out = flattenCheckpointBody("<overview>\nDid a thing.\n</overview>\n<next_steps>\nDo more.\n</next_steps>\n");
     expect(out).toBe("## overview\n\nDid a thing.\n\n## next steps\n\nDo more.");
+  });
+
+  describe("readCheckpoints", () => {
+    it("rejects traversal paths and symlinks outside the checkpoint directory", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-checkpoints-"));
+      const session = path.join(root, "session");
+      const checkpoints = path.join(session, "checkpoints");
+      fs.mkdirSync(checkpoints, { recursive: true });
+      fs.writeFileSync(path.join(session, "private.md"), "private");
+      fs.symlinkSync(path.join(session, "private.md"), path.join(checkpoints, "link.md"));
+      fs.writeFileSync(
+        path.join(checkpoints, "index.md"),
+        [
+          "| # | Title | File |",
+          "|---|---|---|",
+          "| 1 | Traversal | ../private.md |",
+          "| 2 | Symlink | link.md |",
+        ].join("\n"),
+      );
+
+      await expect(readCheckpoints(session)).resolves.toEqual([]);
+      fs.rmSync(root, { recursive: true, force: true });
+    });
   });
 
   it("passes through plain text unchanged", () => {

@@ -217,11 +217,12 @@ export function search(
   }
 
   if (scope === "all" || scope === "artifact") {
-    const pred = textPredicates(parsed, "artifacts_fts", "a.id", "a.body");
+    const artifactText = "COALESCE(a.title || char(10), '') || a.body";
+    const pred = textPredicates(parsed, "artifacts_fts", "a.id", artifactText);
     const rankParams = parsed.match !== null ? [parsed.match] : [];
     parts.push({
       sql: `SELECT 'artifact' AS kind, a.kind AS role, NULL AS timestamp, a.ordinal AS seq,
-                   a.body AS text,
+                   ${artifactText} AS text,
                    ${rankExpr("artifacts_fts", "a.id")} AS rank, a.session_id AS session_id
             FROM artifacts a
             JOIN sessions s ON s.id = a.session_id

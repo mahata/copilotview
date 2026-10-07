@@ -31,7 +31,7 @@ function listOptionsFrom(url: URL): ListOptions {
 /** Locates the built SPA next to the bundled CLI, or in the repo during dev. */
 function resolveWebRoot(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [path.join(here, "web"), path.join(here, "..", "dist", "web")];
+  const candidates = [path.join(here, "web"), path.join(here, "..", "..", "dist", "web")];
   return candidates.find((dir) => fs.existsSync(path.join(dir, "index.html"))) ?? null;
 }
 

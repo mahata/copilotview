@@ -42,15 +42,37 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setDetail(null);
-    api.session(id).then(setDetail).catch((e: Error) => setError(e.message));
+    setError(null);
+    api
+      .session(id)
+      .then((result) => {
+        if (!cancelled) setDetail(result);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
+    let cancelled = false;
+    setEntries([]);
+    setError(null);
     api
       .timeline(id, { tools: showTools ? "1" : "0", subagent: showSubagent ? "1" : "0", injected: showInjected ? "1" : "0" })
-      .then((r) => setEntries(r.entries))
-      .catch((e: Error) => setError(e.message));
+      .then((r) => {
+        if (!cancelled) setEntries(r.entries);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id, showTools, showSubagent, showInjected]);
 
   if (error) return <div className="empty">Failed to load: {error}</div>;
@@ -132,7 +154,7 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
         <section className="section">
           <h2>Files touched ({detail.files.length})</h2>
           <div className="bars">
-            {detail.files.slice(0, 40).map((file) => (
+            {detail.files.map((file) => (
               <div className="tool-line" key={file.path}>
                 <span className="tool-line__name">{file.touchCount}×</span>
                 <span className="tool-line__target">{file.path}</span>

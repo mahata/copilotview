@@ -30,8 +30,8 @@ function splitTerms(input: string): string[] {
 export function parseQuery(input: string): ParsedQuery | null {
   const terms = splitTerms(input);
   if (terms.length === 0) return null;
-  const ftsTerms = terms.filter((t) => t.length >= MIN_TRIGRAM_LENGTH);
-  const likeTerms = terms.filter((t) => t.length < MIN_TRIGRAM_LENGTH);
+  const ftsTerms = terms.filter((t) => [...t].length >= MIN_TRIGRAM_LENGTH);
+  const likeTerms = terms.filter((t) => [...t].length < MIN_TRIGRAM_LENGTH);
   return {
     terms,
     ftsTerms,

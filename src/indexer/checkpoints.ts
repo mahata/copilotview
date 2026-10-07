@@ -35,8 +35,10 @@ export function flattenCheckpointBody(text: string): string {
 
 export async function readCheckpoints(sessionDir: string): Promise<ParsedArtifact[]> {
   const dir = path.join(sessionDir, "checkpoints");
+  let canonicalDir: string;
   let indexText: string;
   try {
+    canonicalDir = await fs.realpath(dir);
     indexText = await fs.readFile(path.join(dir, "index.md"), "utf8");
   } catch {
     return [];
@@ -45,7 +47,10 @@ export async function readCheckpoints(sessionDir: string): Promise<ParsedArtifac
   for (const entry of parseCheckpointIndex(indexText)) {
     let body: string;
     try {
-      body = await fs.readFile(path.join(dir, entry.file), "utf8");
+      const candidate = await fs.realpath(path.join(canonicalDir, entry.file));
+      const relative = path.relative(canonicalDir, candidate);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
+      body = await fs.readFile(candidate, "utf8");
     } catch {
       continue;
     }

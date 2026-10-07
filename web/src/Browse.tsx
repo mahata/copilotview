@@ -30,7 +30,7 @@ function HitCard({ hit, onOpen }: { hit: SearchHit; onOpen: () => void }) {
   const roleLabel = hit.kind === "message" ? (hit.role === "user" ? "Me" : "Copilot") : SCOPE_LABEL[hit.kind];
   const badgeClass = hit.kind === "message" ? `badge--${hit.role}` : `badge--${hit.kind}`;
   return (
-    <div className="card" onClick={onOpen}>
+    <button type="button" className="card" onClick={onOpen}>
       <div className="card__title">{sessionTitle(hit.session)}</div>
       <div className="card__meta">
         <span className={`badge ${badgeClass}`}>{roleLabel}</span>
@@ -40,12 +40,12 @@ function HitCard({ hit, onOpen }: { hit: SearchHit; onOpen: () => void }) {
       <div className="card__snippet">
         <Highlight snippet={hit.snippet} />
       </div>
-    </div>
+    </button>
   );
 }
 
 export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: string) => void }) {
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -57,7 +57,11 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
   const searching = query.length > 0;
 
   useEffect(
-    () => setLimit(PAGE_SIZE),
+    () => {
+      setPage(0);
+      setSessions([]);
+      setHits([]);
+    },
     [filters.q, filters.scope, filters.repository, filters.model, filters.sort, filters.nonEmpty],
   );
 
@@ -67,7 +71,8 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
       repository: filters.repository,
       model: filters.model,
       branch: filters.branch,
-      limit,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
     };
     setLoading(true);
     setError(null);
@@ -76,13 +81,13 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
       const request = searching
         ? api.search({ ...params, q: query, scope: filters.scope }).then((result) => {
             if (cancelled) return;
-            setHits(result.hits);
+            setHits((current) => (page === 0 ? result.hits : [...current, ...result.hits]));
             setTotal(result.total);
             setFallbackTerms(result.fallbackTerms);
           })
         : api.sessions({ ...params, sort: filters.sort, nonEmpty: filters.nonEmpty ? "1" : "" }).then((result) => {
             if (cancelled) return;
-            setSessions(result.sessions);
+            setSessions((current) => (page === 0 ? result.sessions : [...current, ...result.sessions]));
             setTotal(result.total);
             setFallbackTerms([]);
           });
@@ -100,7 +105,7 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, searching, filters.scope, filters.repository, filters.model, filters.branch, filters.sort, filters.nonEmpty, limit]);
+  }, [query, searching, filters.scope, filters.repository, filters.model, filters.branch, filters.sort, filters.nonEmpty, page]);
 
   if (error) return <div className="empty">Failed to load: {error}</div>;
 
@@ -121,19 +126,19 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
 
       {searching
         ? hits.map((hit, i) => (
-            <HitCard key={`${hit.session.id}-${hit.kind}-${hit.seq ?? i}`} hit={hit} onOpen={() => onOpen(hit.session.id)} />
+            <HitCard key={`${hit.session.id}-${hit.kind}-${hit.role ?? ""}-${hit.seq ?? ""}-${i}`} hit={hit} onOpen={() => onOpen(hit.session.id)} />
           ))
         : sessions.map((session) => (
-            <div className="card" key={session.id} onClick={() => onOpen(session.id)}>
+            <button type="button" className="card" key={session.id} onClick={() => onOpen(session.id)}>
               <div className="card__title">{sessionTitle(session)}</div>
               <SessionMeta session={session} />
-            </div>
+            </button>
           ))}
 
       {!loading && shown === 0 && <div className="empty">No results found.</div>}
 
       {shown > 0 && shown < total && (
-        <button className="more" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
+        <button className="more" onClick={() => setPage((n) => n + 1)} disabled={loading}>
           Load more
         </button>
       )}

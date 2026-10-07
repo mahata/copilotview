@@ -9,12 +9,13 @@ export interface SessionInput {
   extraArtifacts: ParsedArtifact[];
   sourceSize: number;
   sourceMtime: number;
+  sourceFingerprint: string;
 }
 
 export interface IndexWriter {
   write(input: SessionInput): void;
   remove(sessionId: string): void;
-  knownSources(): Map<string, { size: number; mtime: number }>;
+  knownSources(): Map<string, { size: number; mtime: number; fingerprint: string }>;
 }
 
 function durationMs(startedAt: string | null, endedAt: string | null): number | null {
@@ -35,12 +36,12 @@ export function createWriter(db: Database): IndexWriter {
         id, dir_path, name, summary, repository, host_type, branch, cwd, git_root,
         head_commit, copilot_version, models, created_at, updated_at, started_at, ended_at,
         duration_ms, user_message_count, assistant_message_count, tool_call_count,
-        file_count, artifact_count, malformed_lines, source_size, source_mtime, indexed_at
+        file_count, artifact_count, malformed_lines, source_size, source_mtime, source_fingerprint, indexed_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?
       )
     `),
     insertMessage: db.prepare(`
@@ -73,13 +74,13 @@ export function createWriter(db: Database): IndexWriter {
 
     knownSources() {
       const rows = db
-        .prepare("SELECT id, source_size AS size, source_mtime AS mtime FROM sessions")
-        .all() as { id: string; size: number; mtime: number }[];
-      return new Map(rows.map((r) => [r.id, { size: r.size, mtime: r.mtime }]));
+        .prepare("SELECT id, source_size AS size, source_mtime AS mtime, source_fingerprint AS fingerprint FROM sessions")
+        .all() as { id: string; size: number; mtime: number; fingerprint: string }[];
+      return new Map(rows.map((r) => [r.id, { size: r.size, mtime: r.mtime, fingerprint: r.fingerprint }]));
     },
 
     write(input) {
-      const { id, dirPath, workspace, events, extraArtifacts, sourceSize, sourceMtime } = input;
+      const { id, dirPath, workspace, events, extraArtifacts, sourceSize, sourceMtime, sourceFingerprint } = input;
       removeSession(id);
 
       const artifacts = [...events.artifacts, ...extraArtifacts];
@@ -113,6 +114,7 @@ export function createWriter(db: Database): IndexWriter {
         events.malformedLines,
         sourceSize,
         sourceMtime,
+        sourceFingerprint,
         new Date().toISOString(),
       );
 
