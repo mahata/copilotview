@@ -57,7 +57,7 @@ Search uses SQLite FTS5 with the trigram tokenizer. This makes Japanese text sea
 ```bash
 pnpm test      # vitest
 pnpm typecheck # tsc --noEmit
-pnpm lint      # eslint
+pnpm lint      # oxlint
 pnpm dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
