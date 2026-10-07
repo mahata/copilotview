@@ -61,6 +61,8 @@ npm run lint      # eslint
 npm run dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
+GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then checks that the built CLI's `index`, `stats`, and `serve` commands work.
+
 ## Design notes
 
 - The index stores only message text, plans, summaries, and file paths; **tool output is not stored**. As a result, 1.2 GB of source data fits in roughly 30 MB.
