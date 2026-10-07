@@ -66,10 +66,10 @@ export function App() {
           </button>
           <nav className="nav">
             <button aria-current={route.view !== "stats"} onClick={() => go("/")}>
-              セッション
+              Sessions
             </button>
             <button aria-current={route.view === "stats"} onClick={() => go("/stats")}>
-              統計
+              Statistics
             </button>
           </nav>
         </div>
@@ -77,19 +77,19 @@ export function App() {
         <div className="search-row">
           <input
             type="search"
-            placeholder="全文検索（スペース区切りで AND）"
+            placeholder="Search all sessions (space-separated terms use AND)"
             value={filters.q}
             onChange={(e) => update({ q: e.target.value })}
           />
           <select value={filters.scope} onChange={(e) => update({ scope: e.target.value })}>
-            <option value="all">すべて</option>
-            <option value="user">自分の発言</option>
-            <option value="assistant">Copilot の応答</option>
-            <option value="artifact">計画・要約</option>
-            <option value="file">ファイル名</option>
+            <option value="all">All content</option>
+            <option value="user">My messages</option>
+            <option value="assistant">Copilot responses</option>
+            <option value="artifact">Plans and summaries</option>
+            <option value="file">File names</option>
           </select>
           <select value={filters.repository} onChange={(e) => update({ repository: e.target.value })}>
-            <option value="">全リポジトリ</option>
+            <option value="">All repositories</option>
             {facets?.repositories.map((r) => (
               <option key={r} value={r}>
                 {r}
@@ -97,7 +97,7 @@ export function App() {
             ))}
           </select>
           <select value={filters.model} onChange={(e) => update({ model: e.target.value })}>
-            <option value="">全モデル</option>
+            <option value="">All models</option>
             {facets?.models.map((m) => (
               <option key={m} value={m}>
                 {m}
@@ -106,10 +106,10 @@ export function App() {
           </select>
           {filters.q.trim() === "" && (
             <select value={filters.sort} onChange={(e) => update({ sort: e.target.value })}>
-              <option value="recent">新しい順</option>
-              <option value="oldest">古い順</option>
-              <option value="longest">長い順</option>
-              <option value="busiest">ツール実行が多い順</option>
+              <option value="recent">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="longest">Longest first</option>
+              <option value="busiest">Most tool calls</option>
             </select>
           )}
         </div>
@@ -122,7 +122,7 @@ export function App() {
                 checked={filters.nonEmpty}
                 onChange={(e) => update({ nonEmpty: e.target.checked })}
               />
-              使われなかったセッションを隠す
+              Hide unused sessions
             </label>
           </div>
         )}

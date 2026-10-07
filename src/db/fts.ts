@@ -1,6 +1,6 @@
 /**
  * The trigram tokenizer cannot index a term shorter than 3 characters, which
- * rules out many common Japanese words (「設定」「実装」…). Such terms fall back to a
+ * rules out many short Japanese words. Such terms fall back to a
  * LIKE scan, which is acceptable because the corpus is a few thousand rows.
  */
 export const MIN_TRIGRAM_LENGTH = 3;

@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, type SearchHit, type SessionSummary } from "./api";
 import type { Filters } from "./App";
-import { Highlight, formatDate, formatDuration, sessionTitle } from "./ui";
+import { Highlight, formatCount, formatDate, formatDuration, sessionTitle } from "./ui";
 
 const PAGE_SIZE = 30;
 
 const SCOPE_LABEL: Record<string, string> = {
-  message: "メッセージ",
-  artifact: "計画・要約",
-  file: "ファイル",
+  message: "Message",
+  artifact: "Plan or summary",
+  file: "File",
 };
 
 function SessionMeta({ session }: { session: SessionSummary }) {
@@ -20,14 +20,14 @@ function SessionMeta({ session }: { session: SessionSummary }) {
       <span>{formatDate(session.updatedAt)}</span>
       <span>{formatDuration(session.durationMs)}</span>
       <span>
-        {session.userMessageCount} 往復 / {session.toolCallCount} ツール
+        {formatCount(session.userMessageCount, "user message")} / {formatCount(session.toolCallCount, "tool call")}
       </span>
     </div>
   );
 }
 
 function HitCard({ hit, onOpen }: { hit: SearchHit; onOpen: () => void }) {
-  const roleLabel = hit.kind === "message" ? (hit.role === "user" ? "自分" : "Copilot") : SCOPE_LABEL[hit.kind];
+  const roleLabel = hit.kind === "message" ? (hit.role === "user" ? "Me" : "Copilot") : SCOPE_LABEL[hit.kind];
   const badgeClass = hit.kind === "message" ? `badge--${hit.role}` : `badge--${hit.kind}`;
   return (
     <div className="card" onClick={onOpen}>
@@ -102,7 +102,7 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
     };
   }, [query, searching, filters.scope, filters.repository, filters.model, filters.branch, filters.sort, filters.nonEmpty, limit]);
 
-  if (error) return <div className="empty">読み込みに失敗しました: {error}</div>;
+  if (error) return <div className="empty">Failed to load: {error}</div>;
 
   const shown = searching ? hits.length : sessions.length;
 
@@ -110,12 +110,12 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
     <>
       <div className="result-count">
         {loading && shown === 0
-          ? "読み込み中…"
+          ? "Loading..."
           : searching
-            ? `${total.toLocaleString()} 件のヒット`
-            : `${total.toLocaleString()} セッション`}
+            ? `${total.toLocaleString()} matches`
+            : `${total.toLocaleString()} sessions`}
         {fallbackTerms.length > 0 && (
-          <> ・ 短い語「{fallbackTerms.join("」「")}」は逐次検索で照合しました</>
+          <> · Short terms ({fallbackTerms.join(", ")}) were matched with a sequential scan</>
         )}
       </div>
 
@@ -130,11 +130,11 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
             </div>
           ))}
 
-      {!loading && shown === 0 && <div className="empty">該当するものがありません。</div>}
+      {!loading && shown === 0 && <div className="empty">No results found.</div>}
 
       {shown > 0 && shown < total && (
         <button className="more" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
-          さらに読み込む
+          Load more
         </button>
       )}
     </>

@@ -16,7 +16,7 @@ export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("ja-JP", {
+  return date.toLocaleString("en-US", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -28,9 +28,10 @@ export function formatDate(value: string | null | undefined): string {
 export function formatDuration(ms: number | null): string {
   if (ms === null || ms <= 0) return "—";
   const minutes = Math.round(ms / 60000);
-  if (minutes < 60) return `${minutes}分`;
+  if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}時間${minutes % 60}分`;
+  const remainder = minutes % 60;
+  return `${hours} ${hours === 1 ? "hr" : "hrs"}${remainder > 0 ? ` ${remainder} min` : ""}`;
 }
 
 export function formatBytes(bytes: number): string {
@@ -42,6 +43,10 @@ export function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+export function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
 export function sessionTitle(session: { name: string | null; summary: string | null; id: string }): string {

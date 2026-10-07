@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, type SessionDetail, type TimelineEntry } from "./api";
-import { formatDate, formatDuration, sessionTitle } from "./ui";
+import { formatCount, formatDate, formatDuration, sessionTitle } from "./ui";
 
 const ARTIFACT_LABEL: Record<string, string> = {
-  plan: "計画",
-  checkpoint: "チェックポイント",
-  completion: "完了レポート",
+  plan: "Plan",
+  checkpoint: "Checkpoint",
+  completion: "Completion report",
 };
 
 function ToolLine({ entry }: { entry: Extract<TimelineEntry, { kind: "tool" }> }) {
@@ -13,7 +13,7 @@ function ToolLine({ entry }: { entry: Extract<TimelineEntry, { kind: "tool" }> }
     <div className={`tool-line${entry.success === 0 ? " tool-line--failed" : ""}`}>
       <span className="tool-line__name">{entry.toolName}</span>
       <span className="tool-line__target">{entry.target ?? ""}</span>
-      {entry.success === 0 && <span>失敗</span>}
+      {entry.success === 0 && <span>Failed</span>}
     </div>
   );
 }
@@ -22,7 +22,7 @@ function Turn({ entry }: { entry: Extract<TimelineEntry, { kind: "message" }> })
   return (
     <div className={`turn turn--${entry.role}`}>
       <div className="turn__gutter">
-        <div>{entry.role === "user" ? "自分" : "Copilot"}</div>
+        <div>{entry.role === "user" ? "Me" : "Copilot"}</div>
         <div>{entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString("ja-JP") : ""}</div>
         {entry.isSubagent && <div>subagent</div>}
       </div>
@@ -53,15 +53,15 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
       .catch((e: Error) => setError(e.message));
   }, [id, showTools, showSubagent, showInjected]);
 
-  if (error) return <div className="empty">読み込みに失敗しました: {error}</div>;
-  if (!detail) return <div className="empty">読み込み中…</div>;
+  if (error) return <div className="empty">Failed to load: {error}</div>;
+  if (!detail) return <div className="empty">Loading...</div>;
 
   const { session } = detail;
 
   return (
     <>
       <button className="back" onClick={onBack}>
-        ← 一覧に戻る
+        ← Back to sessions
       </button>
 
       <div className="detail__header">
@@ -76,31 +76,32 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
           ))}
         </div>
         <dl className="kv">
-          <dt>期間</dt>
+          <dt>Period</dt>
           <dd>
-            {formatDate(session.startedAt ?? session.createdAt)} 〜 {formatDate(session.endedAt ?? session.updatedAt)}（
-            {formatDuration(session.durationMs)}）
+            {formatDate(session.startedAt ?? session.createdAt)} – {formatDate(session.endedAt ?? session.updatedAt)} (
+            {formatDuration(session.durationMs)})
           </dd>
-          <dt>作業ディレクトリ</dt>
+          <dt>Working directory</dt>
           <dd>{session.cwd ?? "—"}</dd>
-          <dt>規模</dt>
+          <dt>Activity</dt>
           <dd>
-            自分 {session.userMessageCount} / Copilot {session.assistantMessageCount} メッセージ、ツール実行{" "}
-            {session.toolCallCount} 回、ファイル {session.fileCount} 件
+            {formatCount(session.userMessageCount, "message")} from me /{" "}
+            {formatCount(session.assistantMessageCount, "message")} from Copilot,{" "}
+            {formatCount(session.toolCallCount, "tool call")}, {formatCount(session.fileCount, "file")}
           </dd>
-          <dt>セッション ID</dt>
+          <dt>Session ID</dt>
           <dd>{session.id}</dd>
-          <dt>データ</dt>
+          <dt>Source data</dt>
           <dd>
             {session.dirPath}
-            {session.malformedLines > 0 && `（解析できなかった行: ${session.malformedLines}）`}
+            {session.malformedLines > 0 && ` (${session.malformedLines} malformed lines)`}
           </dd>
         </dl>
       </div>
 
       {detail.artifacts.length > 0 && (
         <section className="section">
-          <h2>要約・計画</h2>
+          <h2>Summaries and plans</h2>
           {detail.artifacts.map((artifact, i) => (
             <details className="artifact" key={i} open={i === 0 && artifact.kind === "completion"}>
               <summary>
@@ -115,12 +116,12 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
 
       {detail.toolUsage.length > 0 && (
         <section className="section">
-          <h2>ツール使用</h2>
+          <h2>Tool usage</h2>
           <div className="card__meta">
             {detail.toolUsage.map((tool) => (
               <span className="badge" key={tool.toolName}>
                 {tool.toolName} {tool.count}
-                {tool.failures > 0 ? ` (失敗 ${tool.failures})` : ""}
+                {tool.failures > 0 ? ` (${tool.failures} failed)` : ""}
               </span>
             ))}
           </div>
@@ -129,7 +130,7 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
 
       {detail.files.length > 0 && (
         <section className="section">
-          <h2>触れたファイル（{detail.files.length}）</h2>
+          <h2>Files touched ({detail.files.length})</h2>
           <div className="bars">
             {detail.files.slice(0, 40).map((file) => (
               <div className="tool-line" key={file.path}>
@@ -142,19 +143,19 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
       )}
 
       <section className="section">
-        <h2>やり取り</h2>
+        <h2>Conversation</h2>
         <div className="toggles">
           <label>
             <input type="checkbox" checked={showTools} onChange={(e) => setShowTools(e.target.checked)} />
-            ツール実行
+            Tool calls
           </label>
           <label>
             <input type="checkbox" checked={showSubagent} onChange={(e) => setShowSubagent(e.target.checked)} />
-            サブエージェント
+            Subagents
           </label>
           <label>
             <input type="checkbox" checked={showInjected} onChange={(e) => setShowInjected(e.target.checked)} />
-            システム・スキル由来の入力
+            System- and skill-injected messages
           </label>
         </div>
         {entries.map((entry) =>
@@ -164,7 +165,7 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
             <ToolLine key={`t${entry.seq}`} entry={entry} />
           ),
         )}
-        {entries.length === 0 && <div className="empty">表示できるやり取りがありません。</div>}
+        {entries.length === 0 && <div className="empty">No conversation entries to display.</div>}
       </section>
     </>
   );
