@@ -61,7 +61,18 @@ pnpm lint      # oxlint
 pnpm dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
-GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then checks that the built CLI's `index`, `stats`, and `serve` commands work.
+GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then runs `scripts/smoke-test.sh` to check that the built CLI's `index`, `stats`, and `serve` commands work from another directory.
+
+## Releasing
+
+Bump `version` in `package.json`, merge it to `main`, then push a matching tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The Release workflow runs the tests, packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. It fails if the tag doesn't match `package.json`'s version. The tarball needs only Node.js 24 or later at runtime, so a package manager such as Homebrew can install it as is. To build the same tarball in `release/` locally, run `pnpm build && pnpm run package`.
 
 ## Design notes
 

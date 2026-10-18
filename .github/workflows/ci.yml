@@ -38,15 +38,4 @@ jobs:
       - run: pnpm test
       - run: pnpm run build
       - name: Smoke-test the bundled CLI
-        run: |
-          mkdir -p "$RUNNER_TEMP/session-state"
-          node dist/cli.js index --source "$RUNNER_TEMP/session-state" --index "$RUNNER_TEMP/index.db"
-          node dist/cli.js stats --index "$RUNNER_TEMP/index.db"
-          node dist/cli.js serve --index "$RUNNER_TEMP/index.db" --port 4178 &
-          server=$!
-          trap 'kill "$server"' EXIT
-          base=http://127.0.0.1:4178
-          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "$base/api/stats"
-          asset=$(curl -fsS "$base/" | grep -o -m1 '/assets/[^"]*\.js')
-          # Unknown paths fall back to index.html, so a 200 alone doesn't prove static serving works.
-          curl -fsS -o /dev/null -w '%{content_type}\n' "$base$asset" | grep javascript
+        run: scripts/smoke-test.sh dist/cli.js
