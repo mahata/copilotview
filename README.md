@@ -75,16 +75,18 @@ GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 f
 
 ## Releasing
 
-Bump `version` in `package.json`, merge it to `main`, then push a matching tag:
+Releases are automatic. Every push to `main` runs the Release workflow, which runs the tests and builds the CLI and web UI. If the built `cli.js` or `web/` differs from the latest release's tarball, the workflow releases the next minor version: it takes the highest `vX.Y.Z` tag and bumps its minor version, so `v0.1.0` becomes `v0.2.0`. Pushes that leave the bundle unchanged, such as most Dependabot updates of development tools and changes to docs, tests, or CI, don't produce a release. Release versions live only in tags; the `version` in `package.json` is a placeholder.
+
+To release a specific version instead, such as a new major version, push its tag. Later automatic releases continue from the highest tag.
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-The Release workflow runs the tests, packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. It fails if the tag doesn't match `package.json`'s version. To build the same tarball in `release/` locally, run `pnpm build && pnpm run package`.
+A release packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum, creating the tag if it doesn't exist yet. To build the same tarball in `release/` locally, run `RELEASE_TAG=v1.2.3 pnpm run package` after `pnpm build`.
 
-The workflow then updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for an existing release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually:
+After each release, the workflow updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for an existing release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually:
 
 ```bash
 gh workflow run homebrew-tap.yml -f tag=v0.1.0
