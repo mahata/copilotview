@@ -75,21 +75,21 @@ GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 f
 
 ## Releasing
 
-Releases are automatic. Every push to `main` runs the Release workflow, which runs the tests and builds the CLI and web UI. If the built `cli.js` or `web/` differs from the latest release's tarball, the workflow releases the next minor version: it takes the highest `vX.Y.Z` tag and bumps its minor version, so `v0.1.0` becomes `v0.2.0`. Pushes that leave the bundle unchanged, such as most Dependabot updates of development tools and changes to docs, tests, or CI, don't produce a release. Release versions live only in tags; the `version` in `package.json` is a placeholder.
+Releases are automatic. Every push to `main` runs the Release workflow, which runs the tests and builds the CLI and web UI. If the built `cli.js` or `web/` differs from the tarball of the newest published release, the workflow releases the next minor version: it takes the highest `vX.Y.Z` tag and bumps its minor version, so `v0.1.0` becomes `v0.2.0`. Pushes that leave the bundle unchanged, such as most Dependabot updates of development tools and changes to docs, tests, or CI, don't produce a release. A run whose commit is no longer the tip of `main` releases nothing and leaves the decision to the run for the newer commit, so re-running an old run never releases older code. Release versions live only in tags; the `version` in `package.json` is a placeholder.
 
-To release a specific version instead, such as a new major version, push its tag. Later automatic releases continue from the highest tag.
+To release a specific version instead, such as a new major version, wait for the Release run of the commit you want to tag to finish, then push the tag. If you push it while that run is still building, both runs may release the commit. Later automatic releases continue from the highest tag.
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-A release packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum, creating the tag if it doesn't exist yet. To build the same tarball in `release/` locally, run `RELEASE_TAG=v1.2.3 pnpm run package` after `pnpm build`.
+A release packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. An automatic release creates its tag at the released commit just before publishing and fails if that tag already exists, for example because someone pushed it during the run; re-running it then picks the next free version. To build the same tarball in `release/` locally, run `RELEASE_TAG=v1.2.3 pnpm run package` after `pnpm build`.
 
-After each release, the workflow updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for an existing release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually:
+After each release, the workflow updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. It refuses to replace a newer version in the tap with an older one. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for the latest release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually with that release's tag:
 
 ```bash
-gh workflow run homebrew-tap.yml -f tag=v0.1.0
+gh workflow run homebrew-tap.yml -f tag=v1.2.3
 ```
 
 ## Design notes

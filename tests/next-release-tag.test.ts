@@ -15,20 +15,18 @@ function nextReleaseTag(tags: string[]) {
 
 describe("next-release-tag script", () => {
   it("bumps the minor version of the latest tag and resets the patch version", () => {
-    expect(nextReleaseTag(["v0.1.0", "v1.2.3"])).toBe("previous-tag=v1.2.3\ntag=v1.3.0\n");
+    expect(nextReleaseTag(["v0.1.0", "v1.2.3"])).toBe("tag=v1.3.0\n");
   });
 
   it("compares versions numerically rather than alphabetically", () => {
-    expect(nextReleaseTag(["v0.9.0", "v0.10.0", "v0.2.0"])).toBe("previous-tag=v0.10.0\ntag=v0.11.0\n");
+    expect(nextReleaseTag(["v0.9.0", "v0.10.0", "v0.2.0"])).toBe("tag=v0.11.0\n");
   });
 
   it("ignores tags that are not plain vX.Y.Z versions", () => {
-    expect(nextReleaseTag(["v1.0.0", "v2.0.0-rc.1", "release-3", "v3.0"])).toBe(
-      "previous-tag=v1.0.0\ntag=v1.1.0\n",
-    );
+    expect(nextReleaseTag(["v1.0.0", "v2.0.0-rc.1", "release-3", "v3.0"])).toBe("tag=v1.1.0\n");
   });
 
   it("starts at v0.1.0 when there are no version tags", () => {
-    expect(nextReleaseTag([])).toBe("previous-tag=\ntag=v0.1.0\n");
+    expect(nextReleaseTag([])).toBe("tag=v0.1.0\n");
   });
 });

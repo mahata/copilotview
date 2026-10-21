@@ -43,22 +43,38 @@ jobs:
         run: git tag --list 'v*' | node scripts/next-release-tag.mjs >> "$GITHUB_OUTPUT"
       - name: Decide whether to release
         id: decide
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIOUS_TAG: ${{ steps.next.outputs.previous-tag }}
           NEXT_TAG: ${{ steps.next.outputs.tag }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             tag="$GITHUB_REF_NAME"
-          elif [ -z "$PREVIOUS_TAG" ]; then
-            tag="$NEXT_TAG"
           else
-            previous="copilotview-${PREVIOUS_TAG#v}"
-            gh release download "$PREVIOUS_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$previous.tar.gz" --dir "$RUNNER_TEMP"
-            tar -xzf "$RUNNER_TEMP/$previous.tar.gz" -C "$RUNNER_TEMP"
-            if diff -rq dist/cli.js "$RUNNER_TEMP/$previous/cli.js" && diff -rq dist/web "$RUNNER_TEMP/$previous/web"; then
-              echo "::notice::The bundled CLI and web UI are unchanged since $PREVIOUS_TAG, so there is nothing to release."
+            # A rerun of an older commit must not release it over newer code.
+            head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+            if [ "$head" != "$GITHUB_SHA" ]; then
+              echo "::notice::$GITHUB_REF_NAME has moved on to $head, so the run for that commit decides what to release."
               exit 0
+            fi
+            # Compare with the newest published release rather than the newest tag, whose release may still be
+            # running or may have failed.
+            # shellcheck disable=SC2016 # $tag is a jq variable.
+            baseline=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '
+              .[]
+              | select(.draft == false and .prerelease == false)
+              | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | .tag_name as $tag
+              | select(any(.assets[]; .state == "uploaded" and .name == "copilotview-\($tag | ltrimstr("v")).tar.gz"))
+              | $tag' | sort -V | tail -n 1)
+            if [ -n "$baseline" ]; then
+              previous="copilotview-${baseline#v}"
+              gh release download "$baseline" --repo "$GITHUB_REPOSITORY" --pattern "$previous.tar.gz" --dir "$RUNNER_TEMP"
+              tar -xzf "$RUNNER_TEMP/$previous.tar.gz" -C "$RUNNER_TEMP"
+              if diff -rq dist/cli.js "$RUNNER_TEMP/$previous/cli.js" && diff -rq dist/web "$RUNNER_TEMP/$previous/web"; then
+                echo "::notice::The bundled CLI and web UI are unchanged since $baseline, so there is nothing to release."
+                exit 0
+              fi
             fi
             tag="$NEXT_TAG"
           fi
@@ -71,11 +87,21 @@ jobs:
         run: |
           tar -xzf "release/copilotview-${RELEASE_TAG#v}.tar.gz" -C "$RUNNER_TEMP"
           scripts/smoke-test.sh "$RUNNER_TEMP/copilotview-${RELEASE_TAG#v}/cli.js"
+      - name: Reserve the tag
+        if: steps.decide.outputs.tag != '' && github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh release create would silently reuse a tag pushed during this run; creating the ref fails instead.
+          if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" --silent; then
+            echo "::error::Could not create $RELEASE_TAG at $GITHUB_SHA. If someone pushed that tag during this run, re-run this workflow to release the next version."
+            exit 1
+          fi
       - name: Publish the GitHub Release
         if: steps.decide.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --generate-notes
+        run: gh release create "$RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --generate-notes --verify-tag
 
   homebrew:
     name: Homebrew tap

@@ -46,6 +46,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${RELEASE_TAG#v}"
+          current=$(sed -n 's|^  url ".*/releases/download/v\([^/]*\)/.*|\1|p' homebrew-tap/Formula/copilotview.rb 2>/dev/null || true)
+          if [ -n "$current" ] && [ "$(printf '%s\n' "$current" "$version" | sort -V | tail -n 1)" != "$version" ]; then
+            echo "::error::The tap already has copilotview $current, which is newer than $version."
+            exit 1
+          fi
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "copilotview-$version.tar.gz.sha256" --dir "$RUNNER_TEMP"
           read -r sha256 _ < "$RUNNER_TEMP/copilotview-$version.tar.gz.sha256"
           node scripts/homebrew-formula.mjs "$version" "$sha256" > homebrew-tap/Formula/copilotview.rb
