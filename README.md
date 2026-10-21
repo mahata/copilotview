@@ -12,28 +12,38 @@ It treats the source data as read-only and builds a search index at `~/.copilotv
 
 copilotview does not call an LLM to produce summaries. Instead, it gathers and displays information each session already records: the `summary` field in `workspace.yaml`, completion reports, checkpoints, and aggregate counts.
 
-## Requirements
+## Installation
 
-Node.js 24 or later and [pnpm](https://pnpm.io/) 12. copilotview uses the built-in `node:sqlite` module, so there are no native modules to build.
+### Homebrew
 
-## Setup
+```bash
+brew install mahata/tap/copilotview
+```
+
+Use the full name: Homebrew loads formulae from unofficial taps only after you trust them, and naming the formula in full trusts it. Homebrew installs Node.js as a dependency. Upgrade with `brew upgrade copilotview`.
+
+### From source
+
+Requires Node.js 24 or later and [pnpm](https://pnpm.io/) 12. copilotview uses the built-in `node:sqlite` module, so there are no native modules to build.
 
 ```bash
 pnpm install
 pnpm build
 ```
 
+Then run `node dist/cli.js` wherever the examples below use `copilotview`.
+
 ## Usage
 
 ```bash
 # Build the index (later runs re-read only sessions that have changed)
-node dist/cli.js index
+copilotview index
 
 # Start the web UI (http://127.0.0.1:4178)
-node dist/cli.js serve
+copilotview serve
 
 # Print a summary of the index
-node dist/cli.js stats
+copilotview stats
 ```
 
 ### Options
@@ -72,7 +82,13 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The Release workflow runs the tests, packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. It fails if the tag doesn't match `package.json`'s version. The tarball needs only Node.js 24 or later at runtime, so a package manager such as Homebrew can install it as is. To build the same tarball in `release/` locally, run `pnpm build && pnpm run package`.
+The Release workflow runs the tests, packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. It fails if the tag doesn't match `package.json`'s version. To build the same tarball in `release/` locally, run `pnpm build && pnpm run package`.
+
+The workflow then updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for an existing release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually:
+
+```bash
+gh workflow run homebrew-tap.yml -f tag=v0.1.0
+```
 
 ## Design notes
 
