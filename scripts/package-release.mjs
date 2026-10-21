@@ -8,11 +8,11 @@ function fail(message) {
   process.exit(1);
 }
 
-const { version } = JSON.parse(fs.readFileSync("package.json", "utf8"));
 const releaseTag = process.env.RELEASE_TAG;
-if (releaseTag && releaseTag !== `v${version}`) {
-  fail(`Release tag ${releaseTag} does not match package.json version ${version}; expected v${version}.`);
+if (releaseTag && !/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+  fail(`Release tag ${releaseTag} is not a version tag such as v1.2.3.`);
 }
+const version = releaseTag ? releaseTag.slice(1) : JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 
 const requiredBuildOutputs = [path.join("dist", "cli.js"), path.join("dist", "web", "index.html")];
 const missingBuildOutputs = requiredBuildOutputs.filter((file) => !fs.existsSync(file));

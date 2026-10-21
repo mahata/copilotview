@@ -1,6 +1,6 @@
 {
   "name": "copilotview",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "description": "Browse, search and summarize past GitHub Copilot CLI sessions stored in ~/.copilot/session-state",

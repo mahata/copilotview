@@ -78,15 +78,22 @@ describe("package-release script", () => {
     expect(fs.existsSync(path.join(releaseDir, "copilotview-1.2.2.tar.gz"))).toBe(false);
   });
 
-  it("accepts a release tag that matches the package version", () => {
-    expect(runPackageRelease(projectDir, "v1.2.3").status).toBe(0);
+  it("names the tarball and its directory after the release tag rather than the package version", () => {
+    const result = runPackageRelease(projectDir, "v2.0.0");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.readdirSync(releaseDir).sort()).toEqual(["copilotview-2.0.0.tar.gz", "copilotview-2.0.0.tar.gz.sha256"]);
+    const archivedEntries = execFileSync("tar", ["-tzf", path.join(releaseDir, "copilotview-2.0.0.tar.gz")], {
+      encoding: "utf8",
+    });
+    expect(archivedEntries).toContain("copilotview-2.0.0/cli.js");
   });
 
-  it("rejects a release tag that does not match the package version", () => {
-    const result = runPackageRelease(projectDir, "v1.2.4");
+  it.each(["1.2.3", "v1.2", "v1.2.3-rc.1"])("rejects the release tag %s", (releaseTag) => {
+    const result = runPackageRelease(projectDir, releaseTag);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("v1.2.4");
+    expect(result.stderr).toContain(releaseTag);
     expect(fs.existsSync(releaseDir)).toBe(false);
   });
 
