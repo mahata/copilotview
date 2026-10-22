@@ -35,7 +35,7 @@ if [ -n "$expected_version" ] && [ "$version_output" != "copilotview $expected_v
 fi
 node "$cli_path" index --source "$work_dir/session-state" --index "$work_dir/index.db"
 node "$cli_path" stats --index "$work_dir/index.db"
-node "$cli_path" serve --index "$work_dir/index.db" --port "$port" &
+node "$cli_path" serve --source "$work_dir/session-state" --index "$work_dir/index.db" --port "$port" &
 server_pid=$!
 curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "$base_url/api/stats"
 echo

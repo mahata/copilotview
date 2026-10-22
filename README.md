@@ -36,11 +36,11 @@ Then run `node dist/cli.js` wherever the examples below use `copilotview`. A bui
 ## Usage
 
 ```bash
-# Build the index (later runs re-read only sessions that have changed)
-copilotview index
-
-# Start the web UI (http://127.0.0.1:4178)
+# Update the index, then start the web UI (http://127.0.0.1:4178)
 copilotview serve
+
+# Update the index without starting the web UI
+copilotview index
 
 # Print a summary of the index
 copilotview stats
@@ -48,6 +48,8 @@ copilotview stats
 # Print the version (same as `copilotview --version`)
 copilotview version
 ```
+
+`serve` and `index` re-read only the sessions that have changed since the last update, so only the first run takes noticeable time. If `serve` can't update the index, for example because the session-state directory doesn't exist, it prints a warning and serves the index as it is. Sessions that change while `serve` is running appear once you run `copilotview index` or restart `serve`.
 
 ### Options
 
