@@ -6,6 +6,7 @@ import type { Database } from "../src/db/sqlite";
 import { openIndex } from "../src/db/schema";
 import { getSession, getStats, getTimeline, listSessions, search } from "../src/db/query";
 import { indexSessions } from "../src/indexer/scan";
+import { createApp } from "../src/server/app";
 
 function jsonl(...events: unknown[]): string {
   return events.map((e) => JSON.stringify(e)).join("\n") + "\n";
@@ -187,6 +188,8 @@ describe("indexer end to end", () => {
   it("aggregates stats", () => {
     const stats = getStats(db);
     expect(stats.sessionCount).toBe(2);
+    expect(stats.messageCount).toBe(4);
+    expect(stats.toolCallCount).toBe(2);
     expect(stats.models).toEqual([{ model: "claude-opus-5", count: 2 }]);
     expect(stats.tools).toEqual([{ toolName: "edit", count: 2, failures: 0 }]);
     expect(stats.monthly).toEqual([{ month: "2026-05", count: 2 }]);
@@ -221,11 +224,24 @@ describe("period filter", () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-period-test-"));
     const dir = path.join(root, "resumed");
     fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir, "workspace.yaml"), "id: resumed\nupdated_at: 2026-10-01T00:00:00.000Z\n");
+    fs.writeFileSync(
+      path.join(dir, "workspace.yaml"),
+      "id: resumed\nrepository: acme/zoo\nbranch: main\nupdated_at: 2026-10-01T00:00:00.000Z\n",
+    );
     fs.writeFileSync(
       path.join(dir, "events.jsonl"),
       jsonl(
+        {
+          type: "session.start",
+          timestamp: "2026-09-01T00:00:00.000Z",
+          data: { sessionId: "resumed", selectedModel: "claude-opus-5" },
+        },
         { type: "user.message", timestamp: "2026-09-01T00:00:00.000Z", data: { content: "zebra early" } },
+        {
+          type: "tool.execution_start",
+          timestamp: "2026-09-01T00:00:00.000Z",
+          data: { toolCallId: "t0", toolName: "bash", arguments: { command: "ls" } },
+        },
         { type: "user.message", data: { content: "zebra undated" } },
         {
           type: "tool.execution_start",
@@ -276,5 +292,55 @@ describe("period filter", () => {
   it("judges the session list by the session's last update", () => {
     expect(listSessions(db, { from: beforeLastUpdate }).total).toBe(1);
     expect(listSessions(db, { from: afterLastUpdate }).total).toBe(0);
+  });
+
+  it("judges session statistics by the session's last update", () => {
+    const included = getStats(db, { from: beforeLastUpdate });
+    expect(included).toMatchObject({
+      sessionCount: 1,
+      repositories: [{ repository: "acme/zoo", count: 1 }],
+      models: [{ model: "claude-opus-5", count: 1 }],
+      branches: [{ branch: "main", count: 1 }],
+      monthly: [{ month: "2026-09", count: 1 }],
+    });
+    expect(included.indexedBytes).toBeGreaterThan(0);
+
+    expect(getStats(db, { from: afterLastUpdate })).toMatchObject({
+      sessionCount: 0,
+      indexedBytes: 0,
+      repositories: [],
+      models: [],
+      branches: [],
+      monthly: [],
+    });
+  });
+
+  it("counts messages in statistics by when they were sent", () => {
+    expect(getStats(db, { from: afterLastUpdate }).messageCount).toBe(1);
+    expect(getStats(db, { to: beforeLastUpdate }).messageCount).toBe(1);
+  });
+
+  it("counts undated messages in statistics by the session's last update", () => {
+    expect(getStats(db, { from: beforeLastUpdate }).messageCount).toBe(2);
+  });
+
+  it("counts tool calls in statistics by when they were made", () => {
+    expect(getStats(db, { from: beforeLastUpdate })).toMatchObject({
+      toolCallCount: 1,
+      tools: [{ toolName: "edit", count: 1, failures: 0 }],
+    });
+    expect(getStats(db, { from: afterLastUpdate })).toMatchObject({
+      toolCallCount: 1,
+      tools: [{ toolName: "edit", count: 1, failures: 0 }],
+    });
+    expect(getStats(db, { to: beforeLastUpdate })).toMatchObject({
+      toolCallCount: 1,
+      tools: [{ toolName: "bash", count: 1, failures: 0 }],
+    });
+  });
+
+  it("serves statistics for the requested period", async () => {
+    const response = await createApp(db).request(`/api/stats?from=${afterLastUpdate}`);
+    expect(await response.json()).toMatchObject({ sessionCount: 0, messageCount: 1, toolCallCount: 1 });
   });
 });
