@@ -22,6 +22,8 @@ brew install mahata/tap/copilotview
 
 Use the full name: Homebrew loads formulae from unofficial taps only after you trust them, and naming the formula in full trusts it. Homebrew installs Node.js as a dependency. Upgrade with `brew upgrade copilotview`.
 
+The formula also links `cv`, a shorter alias for `copilotview`. If Homebrew's `bin` directory already contains a `cv` from another source, linking fails and `copilotview` isn't linked either; run `brew link --overwrite copilotview` to replace that `cv`.
+
 ### From source
 
 Requires Node.js 24 or later and [pnpm](https://pnpm.io/) 12. copilotview uses the built-in `node:sqlite` module, so there are no native modules to build.
@@ -50,6 +52,8 @@ copilotview version
 ```
 
 `serve` and `index` re-read only the sessions that have changed since the last update, so only the first run takes noticeable time. If `serve` can't update the index, for example because the session-state directory doesn't exist, it prints a warning and serves the index as it is. Sessions that change while `serve` is running appear once you run `copilotview index` or restart `serve`.
+
+`cv` is installed alongside `copilotview` as a shorter alias, so `cv serve` works too.
 
 ### Options
 

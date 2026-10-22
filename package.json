@@ -6,7 +6,8 @@
   "description": "Browse, search and summarize past GitHub Copilot CLI sessions stored in ~/.copilot/session-state",
   "license": "MIT",
   "bin": {
-    "copilotview": "./dist/cli.js"
+    "copilotview": "./dist/cli.js",
+    "cv": "./dist/cli.js"
   },
   "engines": {
     "node": ">=24"

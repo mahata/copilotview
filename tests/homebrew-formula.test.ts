@@ -34,6 +34,14 @@ describe("homebrew-formula script", () => {
     expect(result.stdout).toContain('assert_match version.to_s, shell_output("#{bin}/copilotview --version")');
   });
 
+  it("installs cv as a shorter alias for copilotview and tests it", () => {
+    const result = renderFormula("1.2.3", sha256);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('bin.install_symlink bin/"copilotview" => "cv"');
+    expect(result.stdout).toContain('shell_output("#{bin}/cv stats --index #{testpath}/index.db")');
+  });
+
   it.each(["v1.2.3", "1.2", "1.2.3-beta.1"])("rejects the version %s", (version) => {
     const result = renderFormula(version, sha256);
 
