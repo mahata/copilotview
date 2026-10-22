@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Stats } from "./api";
+import { PERIODS, periodStart } from "./period";
 import { formatBytes } from "./ui";
 
 function Bars({ rows }: { rows: { label: string; value: number; note?: string }[] }) {
@@ -21,20 +22,37 @@ function Bars({ rows }: { rows: { label: string; value: number; note?: string }[
   );
 }
 
-export function StatsView() {
+export function StatsView({ period }: { period: string }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.stats().then(setStats).catch((e: Error) => setError(e.message));
-  }, []);
+    let cancelled = false;
+    setStats(null);
+    setError(null);
+    api
+      .stats({ from: periodStart(period, Date.now()) })
+      .then((result) => {
+        if (!cancelled) setStats(result);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period]);
 
   if (error) return <div className="empty">Failed to load: {error}</div>;
   if (!stats) return <div className="empty">Loading...</div>;
 
+  const selectedPeriod = PERIODS.find((preset) => preset.value === period);
+  const coverage =
+    selectedPeriod?.days === undefined ? "the complete index" : `the ${selectedPeriod.label.toLowerCase()}`;
+
   return (
     <>
-      <div className="result-count">Statistics for the complete index</div>
+      <div className="result-count">Statistics for {coverage}</div>
 
       <div className="stat-grid">
         <div className="stat">

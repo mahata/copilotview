@@ -42,7 +42,10 @@ export function createApp(db: Database): Hono {
 
   app.get("/api/facets", (c) => c.json(getFacets(db)));
 
-  app.get("/api/stats", (c) => c.json(getStats(db)));
+  app.get("/api/stats", (c) => {
+    const { from, to } = listOptionsFrom(new URL(c.req.url));
+    return c.json(getStats(db, { from, to }));
+  });
 
   app.get("/api/sessions", (c) => {
     const url = new URL(c.req.url);

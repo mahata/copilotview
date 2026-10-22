@@ -103,7 +103,7 @@ async function get<T>(path: string, params: Record<string, string | number | und
 
 export const api = {
   facets: () => get<Facets>("/api/facets"),
-  stats: () => get<Stats>("/api/stats"),
+  stats: (params: Record<string, string | number | undefined>) => get<Stats>("/api/stats", params),
   sessions: (params: Record<string, string | number | undefined>) =>
     get<{ total: number; sessions: SessionSummary[] }>("/api/sessions", params),
   search: (params: Record<string, string | number | undefined>) => get<SearchResult>("/api/search", params),

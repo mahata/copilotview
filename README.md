@@ -8,7 +8,7 @@ It treats the source data as read-only and builds a search index at `~/.copilotv
 
 - **Full-text search** — Search across all sessions, optionally scoped to your messages, Copilot responses, plans and summaries, or file names. Filter by repository, model, and period, from the past 24 hours to the past year.
 - **Session browsing** — View the conversation timeline, tool call log, files touched, plans, and completion reports.
-- **Statistics** — See sessions by month and usage trends by repository, model, and tool.
+- **Statistics** — See sessions by month and usage trends by repository, model, and tool, across the complete index or the same periods as search.
 
 copilotview does not call an LLM to produce summaries. Instead, it gathers and displays information each session already records: the `summary` field in `workspace.yaml`, completion reports, checkpoints, and aggregate counts.
 
@@ -63,6 +63,8 @@ You can also override the defaults with the `COPILOTVIEW_SESSION_STATE` and `COP
 Search uses SQLite FTS5 with the trigram tokenizer. This makes Japanese text searchable without word segmentation, but because the index is built from trigrams, **terms shorter than three characters can't be looked up in the index**. One- and two-character terms therefore fall back to a sequential `LIKE` scan, and the UI tells you when this happens. Separate multiple terms with spaces to combine them with AND.
 
 The period filter compares the time shown on each result: the time a message was sent for message matches, and the session's last update for plan, summary, and file name matches and for the session list.
+
+The selected period also applies to the Statistics page. It counts sessions, along with their repositories, models, branches, and source data, by the session's last update, as the session list does, and Sessions by month still groups them by the month they were created. It counts messages by the time they were sent and tool calls by the time they were made.
 
 ## Development
 

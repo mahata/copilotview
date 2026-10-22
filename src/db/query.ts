@@ -110,12 +110,16 @@ function filterClauses(
   return { sql, params };
 }
 
+function whereAll(conditions: string[]): string {
+  return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+}
+
 export function listSessions(
   db: Database,
   options: ListOptions = {},
 ): { total: number; sessions: SessionSummary[] } {
   const { sql, params } = filterClauses(options);
-  const where = sql.length > 0 ? `WHERE ${sql.join(" AND ")}` : "";
+  const where = whereAll(sql);
   const total = Number(
     (db.prepare(`SELECT COUNT(*) AS n FROM sessions s ${where}`).get(...params) as Row).n,
   );
@@ -452,67 +456,90 @@ export interface Stats {
   branches: { branch: string; count: number }[];
 }
 
-export function getStats(db: Database): Stats {
+export type StatsPeriod = Pick<SessionFilters, "from" | "to">;
+
+const NON_INJECTED_MESSAGE = "(m.role = 'assistant' OR m.source IS NULL)";
+
+export function getStats(db: Database, period: StatsPeriod = {}): Stats {
+  const sessionFilter = filterClauses(period, "s.updated_at");
+  const messageFilter = filterClauses(period, "COALESCE(m.timestamp, s.updated_at)");
+  const toolFilter = filterClauses(period, "COALESCE(t.timestamp, s.updated_at)");
+
   const totals = db
     .prepare(
-      `SELECT COUNT(*) AS sessions,
-              COALESCE(SUM(user_message_count + assistant_message_count), 0) AS messages,
-              COALESCE(SUM(tool_call_count), 0) AS tools,
-              COALESCE(SUM(source_size), 0) AS bytes
-       FROM sessions`,
+      `SELECT COUNT(*) AS sessions, COALESCE(SUM(source_size), 0) AS bytes
+       FROM sessions s ${whereAll(sessionFilter.sql)}`,
     )
-    .get() as Row;
+    .get(...sessionFilter.params) as Row;
+
+  const messages = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM messages m JOIN sessions s ON s.id = m.session_id
+       ${whereAll([NON_INJECTED_MESSAGE, ...messageFilter.sql])}`,
+    )
+    .get(...messageFilter.params) as Row;
+
+  const toolCalls = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM tool_calls t JOIN sessions s ON s.id = t.session_id
+       ${whereAll(toolFilter.sql)}`,
+    )
+    .get(...toolFilter.params) as Row;
 
   const repositories = (
     db
       .prepare(
-        `SELECT repository, COUNT(*) AS count FROM sessions
-         WHERE repository IS NOT NULL GROUP BY repository ORDER BY count DESC LIMIT 30`,
+        `SELECT repository, COUNT(*) AS count FROM sessions s
+         ${whereAll(["repository IS NOT NULL", ...sessionFilter.sql])}
+         GROUP BY repository ORDER BY count DESC LIMIT 30`,
       )
-      .all() as Row[]
+      .all(...sessionFilter.params) as Row[]
   ).map((r) => ({ repository: String(r.repository), count: Number(r.count) }));
 
   const models = (
     db
       .prepare(
         `SELECT json_each.value AS model, COUNT(*) AS count
-         FROM sessions, json_each(sessions.models)
+         FROM sessions s, json_each(s.models) ${whereAll(sessionFilter.sql)}
          GROUP BY model ORDER BY count DESC LIMIT 30`,
       )
-      .all() as Row[]
+      .all(...sessionFilter.params) as Row[]
   ).map((r) => ({ model: String(r.model), count: Number(r.count) }));
 
   const tools = (
     db
       .prepare(
         `SELECT tool_name, COUNT(*) AS count, SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failures
-         FROM tool_calls GROUP BY tool_name ORDER BY count DESC LIMIT 30`,
+         FROM tool_calls t JOIN sessions s ON s.id = t.session_id ${whereAll(toolFilter.sql)}
+         GROUP BY tool_name ORDER BY count DESC LIMIT 30`,
       )
-      .all() as Row[]
+      .all(...toolFilter.params) as Row[]
   ).map((r) => ({ toolName: String(r.tool_name), count: Number(r.count), failures: Number(r.failures ?? 0) }));
 
   const monthly = (
     db
       .prepare(
         `SELECT substr(COALESCE(created_at, updated_at), 1, 7) AS month, COUNT(*) AS count
-         FROM sessions WHERE month IS NOT NULL GROUP BY month ORDER BY month`,
+         FROM sessions s ${whereAll(["month IS NOT NULL", ...sessionFilter.sql])}
+         GROUP BY month ORDER BY month`,
       )
-      .all() as Row[]
+      .all(...sessionFilter.params) as Row[]
   ).map((r) => ({ month: String(r.month), count: Number(r.count) }));
 
   const branches = (
     db
       .prepare(
-        `SELECT branch, COUNT(*) AS count FROM sessions
-         WHERE branch IS NOT NULL GROUP BY branch ORDER BY count DESC LIMIT 30`,
+        `SELECT branch, COUNT(*) AS count FROM sessions s
+         ${whereAll(["branch IS NOT NULL", ...sessionFilter.sql])}
+         GROUP BY branch ORDER BY count DESC LIMIT 30`,
       )
-      .all() as Row[]
+      .all(...sessionFilter.params) as Row[]
   ).map((r) => ({ branch: String(r.branch), count: Number(r.count) }));
 
   return {
     sessionCount: Number(totals.sessions ?? 0),
-    messageCount: Number(totals.messages ?? 0),
-    toolCallCount: Number(totals.tools ?? 0),
+    messageCount: Number(messages.count),
+    toolCallCount: Number(toolCalls.count),
     indexedBytes: Number(totals.bytes ?? 0),
     repositories,
     models,

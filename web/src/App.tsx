@@ -60,6 +60,11 @@ export function App() {
     if (route.view !== "browse") go("/");
   };
 
+  const updatePeriod = (period: string) => {
+    setFilters((prev) => ({ ...prev, period }));
+    if (route.view === "session") go("/");
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -107,7 +112,7 @@ export function App() {
               </option>
             ))}
           </select>
-          <select aria-label="Period" value={filters.period} onChange={(e) => update({ period: e.target.value })}>
+          <select aria-label="Period" value={filters.period} onChange={(e) => updatePeriod(e.target.value)}>
             {PERIODS.map((period) => (
               <option key={period.value} value={period.value}>
                 {period.label}
@@ -139,7 +144,7 @@ export function App() {
       </header>
 
       {route.view === "stats" ? (
-        <StatsView />
+        <StatsView period={filters.period} />
       ) : route.view === "session" ? (
         <Detail id={route.id} onBack={() => go("/")} />
       ) : (
