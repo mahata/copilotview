@@ -51,6 +51,8 @@ copilotview version
 
 `serve` and `index` re-read only the sessions that have changed since the last update, so only the first run takes noticeable time. If `serve` can't update the index, for example because the session-state directory doesn't exist, it prints a warning and serves the index as it is. Sessions that change while `serve` is running appear once you run `copilotview index` or restart `serve`.
 
+`cv` is installed alongside `copilotview` as a shorter alias, so `cv serve` works too.
+
 ### Options
 
 | Option | Description |

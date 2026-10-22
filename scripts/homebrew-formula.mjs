@@ -31,6 +31,7 @@ process.stdout.write(`class Copilotview < Formula
       #!/bin/bash
       exec "#{formula_opt_bin("node")}/node" "#{libexec}/cli.js" "$@"
     SH
+    bin.install_symlink bin/"copilotview" => "cv"
   end
 
   test do
@@ -39,6 +40,7 @@ process.stdout.write(`class Copilotview < Formula
     (testpath/"sessions").mkpath
     system bin/"copilotview", "index", "--source", testpath/"sessions", "--index", testpath/"index.db"
     assert_match "Sessions:   0", shell_output("#{bin}/copilotview stats --index #{testpath}/index.db")
+    assert_match "Sessions:   0", shell_output("#{bin}/cv stats --index #{testpath}/index.db")
 
     port = free_port
     pid = spawn bin/"copilotview", "serve", "--source", testpath/"sessions", "--index", testpath/"index.db",

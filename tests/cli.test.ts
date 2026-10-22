@@ -22,4 +22,11 @@ describe("copilotview CLI", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("copilotview version");
   });
+
+  it("tells users in its help that cv is a shorter alias", () => {
+    const result = runCli("--help");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("cv is a shorter alias for copilotview");
+  });
 });

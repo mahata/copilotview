@@ -45,6 +45,8 @@ Usage:
   copilotview stats [options]    Print index statistics
   copilotview version            Print the version (same as --version)
 
+cv is a shorter alias for copilotview, e.g. cv serve.
+
 Options:
   --source <dir>   session-state directory (default: ~/.copilot/session-state)
   --index <file>   index database path (default: ~/.copilotview/index.db)
