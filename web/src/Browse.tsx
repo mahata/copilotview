@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type SearchHit, type SessionSummary } from "./api";
 import type { Filters } from "./App";
+import { periodStart } from "./period";
 import { Highlight, formatCount, formatDate, formatDuration, sessionTitle } from "./ui";
 
 const PAGE_SIZE = 30;
@@ -52,6 +53,7 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
   const [fallbackTerms, setFallbackTerms] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const firstPagePeriodStart = useRef<string | undefined>(undefined);
 
   const query = filters.q.trim();
   const searching = query.length > 0;
@@ -62,15 +64,17 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
       setSessions([]);
       setHits([]);
     },
-    [filters.q, filters.scope, filters.repository, filters.model, filters.sort, filters.nonEmpty],
+    [filters.q, filters.scope, filters.repository, filters.model, filters.period, filters.sort, filters.nonEmpty],
   );
 
   useEffect(() => {
     let cancelled = false;
+    if (page === 0) firstPagePeriodStart.current = periodStart(filters.period, Date.now());
     const params = {
       repository: filters.repository,
       model: filters.model,
       branch: filters.branch,
+      from: firstPagePeriodStart.current,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     };
@@ -105,7 +109,7 @@ export function Browse({ filters, onOpen }: { filters: Filters; onOpen: (id: str
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, searching, filters.scope, filters.repository, filters.model, filters.branch, filters.sort, filters.nonEmpty, page]);
+  }, [query, searching, filters.scope, filters.repository, filters.model, filters.period, filters.branch, filters.sort, filters.nonEmpty, page]);
 
   if (error) return <div className="empty">Failed to load: {error}</div>;
 

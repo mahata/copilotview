@@ -78,7 +78,10 @@ const ORDER_BY: Record<NonNullable<ListOptions["sort"]>, string> = {
   busiest: "s.tool_call_count DESC, s.id",
 };
 
-function filterClauses(filters: SessionFilters): { sql: string[]; params: (string | number)[] } {
+function filterClauses(
+  filters: SessionFilters,
+  resultTimestamp = "s.updated_at",
+): { sql: string[]; params: (string | number)[] } {
   const sql: string[] = [];
   const params: (string | number)[] = [];
   if (filters.repository) {
@@ -94,11 +97,11 @@ function filterClauses(filters: SessionFilters): { sql: string[]; params: (strin
     params.push(filters.model);
   }
   if (filters.from) {
-    sql.push("s.updated_at >= ?");
+    sql.push(`${resultTimestamp} >= ?`);
     params.push(filters.from);
   }
   if (filters.to) {
-    sql.push("s.updated_at <= ?");
+    sql.push(`${resultTimestamp} <= ?`);
     params.push(filters.to);
   }
   if (filters.nonEmpty) {
@@ -187,8 +190,10 @@ export function search(
   if (!parsed) return { hits: [], total: 0, fallbackTerms: [] };
 
   const scope = options.scope ?? "all";
-  const { sql: filterSql, params: filterParams } = filterClauses(options);
-  const filterWhere = filterSql.length > 0 ? `AND ${filterSql.join(" AND ")}` : "";
+  const filtersFor = (resultTimestamp?: string): QueryPart => {
+    const { sql, params } = filterClauses(options, resultTimestamp);
+    return { sql: sql.length > 0 ? `AND ${sql.join(" AND ")}` : "", params };
+  };
   const rankExpr = (table: string, idColumn: string) =>
     parsed.match !== null
       ? `(SELECT bm25(${table}) FROM ${table} WHERE ${table} MATCH ? AND rowid = ${idColumn})`
@@ -205,14 +210,15 @@ export function search(
           : "";
     const pred = textPredicates(parsed, "messages_fts", "m.id", "m.content");
     const rankParams = parsed.match !== null ? [parsed.match] : [];
+    const filters = filtersFor("COALESCE(m.timestamp, s.updated_at)");
     parts.push({
       sql: `SELECT 'message' AS kind, m.role AS role, m.timestamp AS timestamp, m.seq AS seq,
                    m.content AS text,
                    ${rankExpr("messages_fts", "m.id")} AS rank, m.session_id AS session_id
             FROM messages m
             JOIN sessions s ON s.id = m.session_id
-            WHERE ${pred.sql} ${roleClause} ${filterWhere}`,
-      params: [...rankParams, ...pred.params, ...filterParams],
+            WHERE ${pred.sql} ${roleClause} ${filters.sql}`,
+      params: [...rankParams, ...pred.params, ...filters.params],
     });
   }
 
@@ -220,27 +226,29 @@ export function search(
     const artifactText = "COALESCE(a.title || char(10), '') || a.body";
     const pred = textPredicates(parsed, "artifacts_fts", "a.id", artifactText);
     const rankParams = parsed.match !== null ? [parsed.match] : [];
+    const filters = filtersFor();
     parts.push({
       sql: `SELECT 'artifact' AS kind, a.kind AS role, NULL AS timestamp, a.ordinal AS seq,
                    ${artifactText} AS text,
                    ${rankExpr("artifacts_fts", "a.id")} AS rank, a.session_id AS session_id
             FROM artifacts a
             JOIN sessions s ON s.id = a.session_id
-            WHERE ${pred.sql} ${filterWhere}`,
-      params: [...rankParams, ...pred.params, ...filterParams],
+            WHERE ${pred.sql} ${filters.sql}`,
+      params: [...rankParams, ...pred.params, ...filters.params],
     });
   }
 
   if (scope === "all" || scope === "file") {
     const clauses = parsed.terms.map(() => "f.file_path LIKE ? ESCAPE '\\'");
+    const filters = filtersFor();
     parts.push({
       sql: `SELECT 'file' AS kind, f.tool_name AS role, NULL AS timestamp, NULL AS seq,
                    f.file_path AS text,
                    0.0 AS rank, f.session_id AS session_id
             FROM session_files f
             JOIN sessions s ON s.id = f.session_id
-            WHERE ${clauses.join(" AND ")} ${filterWhere}`,
-      params: [...parsed.terms.map(likePattern), ...filterParams],
+            WHERE ${clauses.join(" AND ")} ${filters.sql}`,
+      params: [...parsed.terms.map(likePattern), ...filters.params],
     });
   }
 

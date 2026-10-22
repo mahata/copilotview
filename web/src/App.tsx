@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Facets } from "./api";
 import { Browse } from "./Browse";
 import { Detail } from "./Detail";
+import { PERIODS } from "./period";
 import { StatsView } from "./Stats";
 
 type Route = { view: "browse" } | { view: "stats" } | { view: "session"; id: string };
@@ -19,6 +20,7 @@ export interface Filters {
   repository: string;
   branch: string;
   model: string;
+  period: string;
   sort: string;
   nonEmpty: boolean;
 }
@@ -29,6 +31,7 @@ const EMPTY_FILTERS: Filters = {
   repository: "",
   branch: "",
   model: "",
+  period: "",
   sort: "recent",
   nonEmpty: true,
 };
@@ -101,6 +104,13 @@ export function App() {
             {facets?.models.map((m) => (
               <option key={m} value={m}>
                 {m}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Period" value={filters.period} onChange={(e) => update({ period: e.target.value })}>
+            {PERIODS.map((period) => (
+              <option key={period.value} value={period.value}>
+                {period.label}
               </option>
             ))}
           </select>
