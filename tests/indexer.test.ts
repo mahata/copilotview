@@ -210,3 +210,71 @@ describe("indexer end to end", () => {
     expect(search(db, "flaky").total).toBe(0);
   });
 });
+
+describe("period filter", () => {
+  const beforeLastUpdate = "2026-09-15T00:00:00.000Z";
+  const afterLastUpdate = "2026-10-15T00:00:00.000Z";
+  let root: string;
+  let db: Database;
+
+  beforeAll(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-period-test-"));
+    const dir = path.join(root, "resumed");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "workspace.yaml"), "id: resumed\nupdated_at: 2026-10-01T00:00:00.000Z\n");
+    fs.writeFileSync(
+      path.join(dir, "events.jsonl"),
+      jsonl(
+        { type: "user.message", timestamp: "2026-09-01T00:00:00.000Z", data: { content: "zebra early" } },
+        { type: "user.message", data: { content: "zebra undated" } },
+        {
+          type: "tool.execution_start",
+          timestamp: "2026-10-20T00:00:00.000Z",
+          data: { toolCallId: "t1", toolName: "edit", arguments: { path: "/w/zebra.ts" } },
+        },
+        { type: "user.message", timestamp: "2026-10-20T00:00:00.000Z", data: { content: "zebra late" } },
+        {
+          type: "session.task_complete",
+          timestamp: "2026-10-20T00:00:00.000Z",
+          data: { summary: "zebra report", success: true },
+        },
+      ),
+    );
+    db = openIndex(":memory:");
+    await indexSessions(db, root);
+  });
+
+  afterAll(() => {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  function matchedUserMessages(period: { from?: string; to?: string }): string[] {
+    return search(db, "zebra", { scope: "user", ...period })
+      .hits.map((hit) => hit.snippet.text)
+      .sort();
+  }
+
+  it("judges message hits by when the message was sent", () => {
+    expect(matchedUserMessages({ from: afterLastUpdate })).toEqual(["zebra late"]);
+    expect(matchedUserMessages({ from: beforeLastUpdate })).not.toContain("zebra early");
+    expect(matchedUserMessages({ to: beforeLastUpdate })).toEqual(["zebra early"]);
+  });
+
+  it("falls back to the session's last update for messages without a timestamp", () => {
+    expect(matchedUserMessages({ from: beforeLastUpdate })).toContain("zebra undated");
+    expect(matchedUserMessages({ from: afterLastUpdate })).not.toContain("zebra undated");
+  });
+
+  it("judges plan, summary, and file name hits by the session's last update", () => {
+    for (const scope of ["artifact", "file"] as const) {
+      expect(search(db, "zebra", { scope, from: beforeLastUpdate }).total).toBe(1);
+      expect(search(db, "zebra", { scope, from: afterLastUpdate }).total).toBe(0);
+    }
+  });
+
+  it("judges the session list by the session's last update", () => {
+    expect(listSessions(db, { from: beforeLastUpdate }).total).toBe(1);
+    expect(listSessions(db, { from: afterLastUpdate }).total).toBe(0);
+  });
+});
