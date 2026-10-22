@@ -86,7 +86,7 @@ jobs:
         if: steps.decide.outputs.tag != ''
         run: |
           tar -xzf "release/copilotview-${RELEASE_TAG#v}.tar.gz" -C "$RUNNER_TEMP"
-          scripts/smoke-test.sh "$RUNNER_TEMP/copilotview-${RELEASE_TAG#v}/cli.js"
+          scripts/smoke-test.sh "$RUNNER_TEMP/copilotview-${RELEASE_TAG#v}/cli.js" "${RELEASE_TAG#v}"
       - name: Reserve the tag
         if: steps.decide.outputs.tag != '' && github.ref_type == 'branch'
         env:

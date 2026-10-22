@@ -41,7 +41,7 @@ describe("package-release script", () => {
     fs.rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it("archives the bundled CLI, web UI, license and readme under a versioned directory", () => {
+  it("archives the bundled CLI, web UI, version file, license and readme under a versioned directory", () => {
     const result = runPackageRelease(projectDir);
 
     expect(result.status, result.stderr).toBe(0);
@@ -51,10 +51,23 @@ describe("package-release script", () => {
     expect(archivedFiles.sort()).toEqual([
       "copilotview-1.2.3/LICENSE",
       "copilotview-1.2.3/README.md",
+      "copilotview-1.2.3/VERSION",
       "copilotview-1.2.3/cli.js",
       "copilotview-1.2.3/web/assets/index.js",
       "copilotview-1.2.3/web/index.html",
     ]);
+  });
+
+  it("records the release version next to the CLI for copilotview --version", () => {
+    const result = runPackageRelease(projectDir, "v2.0.0");
+
+    expect(result.status, result.stderr).toBe(0);
+    const recordedVersion = execFileSync(
+      "tar",
+      ["-xzOf", path.join(releaseDir, "copilotview-2.0.0.tar.gz"), "copilotview-2.0.0/VERSION"],
+      { encoding: "utf8" },
+    );
+    expect(recordedVersion).toBe("2.0.0\n");
   });
 
   it("writes a sha256sum-compatible checksum next to the tarball", () => {

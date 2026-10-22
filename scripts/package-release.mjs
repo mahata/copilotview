@@ -28,6 +28,7 @@ const stagingDir = path.join(releaseDir, releaseName);
 fs.rmSync(releaseDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 fs.cpSync("dist", stagingDir, { recursive: true });
+fs.writeFileSync(path.join(stagingDir, "VERSION"), `${version}\n`);
 for (const file of ["LICENSE", "README.md"]) {
   fs.copyFileSync(file, path.join(stagingDir, file));
 }

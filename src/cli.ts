@@ -2,6 +2,7 @@ import { defaultIndexPath, defaultSessionStateDir } from "./paths";
 import { openIndex } from "./db/schema";
 import { indexSessions } from "./indexer/scan";
 import { createApp } from "./server/app";
+import { readVersion } from "./version";
 
 interface ParsedArgs {
   command: string;
@@ -41,6 +42,7 @@ Usage:
   copilotview index [options]    Build or refresh the search index
   copilotview serve [options]    Start the local web UI
   copilotview stats [options]    Print index statistics
+  copilotview version            Print the version (same as --version)
 
 Options:
   --source <dir>   session-state directory (default: ~/.copilot/session-state)
@@ -165,6 +167,10 @@ async function main(): Promise<void> {
       break;
     case "stats":
       await runStats(flags);
+      break;
+    case "version":
+    case "--version":
+      process.stdout.write(`copilotview ${readVersion()}\n`);
       break;
     case "help":
     case "--help":
