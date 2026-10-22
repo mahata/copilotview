@@ -26,7 +26,7 @@ process.stdout.write(`class Copilotview < Formula
   depends_on "node"
 
   def install
-    libexec.install "cli.js", "web"
+    libexec.install "cli.js", "web", "VERSION"
     (bin/"copilotview").write <<~SH
       #!/bin/bash
       exec "#{formula_opt_bin("node")}/node" "#{libexec}/cli.js" "$@"
@@ -34,6 +34,8 @@ process.stdout.write(`class Copilotview < Formula
   end
 
   test do
+    assert_match version.to_s, shell_output("#{bin}/copilotview --version")
+
     (testpath/"sessions").mkpath
     system bin/"copilotview", "index", "--source", testpath/"sessions", "--index", testpath/"index.db"
     assert_match "Sessions:   0", shell_output("#{bin}/copilotview stats --index #{testpath}/index.db")

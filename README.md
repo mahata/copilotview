@@ -31,7 +31,7 @@ pnpm install
 pnpm build
 ```
 
-Then run `node dist/cli.js` wherever the examples below use `copilotview`.
+Then run `node dist/cli.js` wherever the examples below use `copilotview`. A build from source reports its version as `0.0.0-dev`, because only release tarballs record a version.
 
 ## Usage
 
@@ -44,6 +44,9 @@ copilotview serve
 
 # Print a summary of the index
 copilotview stats
+
+# Print the version (same as `copilotview --version`)
+copilotview version
 ```
 
 ### Options
@@ -73,7 +76,7 @@ pnpm lint      # oxlint
 pnpm dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
-GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then runs `scripts/smoke-test.sh` to check that the built CLI's `index`, `stats`, and `serve` commands work from another directory.
+GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then runs `scripts/smoke-test.sh` to check that the built CLI's `version`, `index`, `stats`, and `serve` commands work from another directory.
 
 ## Releasing
 
@@ -86,7 +89,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-A release packages the bundled CLI, web UI, LICENSE, and README into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, and publishes a GitHub Release with the tarball and its `.sha256` checksum. An automatic release creates its tag at the released commit just before publishing and fails if that tag already exists, for example because someone pushed it during the run; re-running it then picks the next free version. To build the same tarball in `release/` locally, run `RELEASE_TAG=v1.2.3 pnpm run package` after `pnpm build`.
+A release packages the bundled CLI, web UI, LICENSE, README, and a `VERSION` file holding the version into `copilotview-<version>.tar.gz`, smoke-tests the packaged CLI, including that `copilotview --version` reports that version, and publishes a GitHub Release with the tarball and its `.sha256` checksum. The CLI reads its version from `VERSION` next to `cli.js` rather than having it built into the bundle, so the comparison with the previous release still treats an unchanged `cli.js` as unchanged. An automatic release creates its tag at the released commit just before publishing and fails if that tag already exists, for example because someone pushed it during the run; re-running it then picks the next free version. To build the same tarball in `release/` locally, run `RELEASE_TAG=v1.2.3 pnpm run package` after `pnpm build`.
 
 After each release, the workflow updates the formula in [mahata/homebrew-tap](https://github.com/mahata/homebrew-tap): it renders `Formula/copilotview.rb` for the new tarball with `scripts/homebrew-formula.mjs`, installs, tests, and audits it with Homebrew, and only then pushes it. It refuses to replace a newer version in the tap with an older one. The push uses the `HOMEBREW_TAP_DEPLOY_KEY` Actions secret, which holds the private key of a deploy key with write access to the tap. To publish the formula again for the latest release, for example after changing the script or after a failed update, run the Homebrew tap workflow manually with that release's tag:
 
