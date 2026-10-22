@@ -39,7 +39,8 @@ process.stdout.write(`class Copilotview < Formula
     assert_match "Sessions:   0", shell_output("#{bin}/copilotview stats --index #{testpath}/index.db")
 
     port = free_port
-    pid = spawn bin/"copilotview", "serve", "--index", testpath/"index.db", "--port", port.to_s
+    pid = spawn bin/"copilotview", "serve", "--source", testpath/"sessions", "--index", testpath/"index.db",
+                "--port", port.to_s
     url = "http://127.0.0.1:#{port}/"
     assert_match "<title>copilotview</title>",
                  shell_output("curl -fsS --retry 10 --retry-connrefused --retry-delay 1 #{url}")

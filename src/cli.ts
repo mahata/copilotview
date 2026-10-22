@@ -1,5 +1,6 @@
 import { defaultIndexPath, defaultSessionStateDir } from "./paths";
 import { openIndex } from "./db/schema";
+import type { Database } from "./db/sqlite";
 import { indexSessions } from "./indexer/scan";
 import { createApp } from "./server/app";
 
@@ -39,7 +40,7 @@ const HELP = `copilotview — browse and search past Copilot CLI sessions
 
 Usage:
   copilotview index [options]    Build or refresh the search index
-  copilotview serve [options]    Start the local web UI
+  copilotview serve [options]    Refresh the search index, then start the local web UI
   copilotview stats [options]    Print index statistics
 
 Options:
@@ -63,11 +64,8 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-async function runIndex(flags: ParsedArgs["flags"]): Promise<void> {
+async function updateIndex(db: Database, indexPath: string, flags: ParsedArgs["flags"]): Promise<void> {
   const source = flagString(flags, "source") ?? defaultSessionStateDir();
-  const indexPath = flagString(flags, "index") ?? defaultIndexPath();
-  const db = openIndex(indexPath);
-
   process.stdout.write(`Source: ${source}\nIndex:  ${indexPath}\n\n`);
   const isTty = process.stdout.isTTY === true;
   let lastRender = 0;
@@ -84,8 +82,9 @@ async function runIndex(flags: ParsedArgs["flags"]): Promise<void> {
         `\r\x1b[2K${pct}%  ${progress.scanned}/${progress.total}  indexed ${progress.indexed}  skipped ${progress.skipped}`,
       );
     },
+  }).finally(() => {
+    if (isTty) process.stdout.write("\r\x1b[2K");
   });
-  if (isTty) process.stdout.write("\r\x1b[2K");
 
   process.stdout.write(
     [
@@ -99,6 +98,12 @@ async function runIndex(flags: ParsedArgs["flags"]): Promise<void> {
       .filter((l) => l !== null)
       .join("\n"),
   );
+}
+
+async function runIndex(flags: ParsedArgs["flags"]): Promise<void> {
+  const indexPath = flagString(flags, "index") ?? defaultIndexPath();
+  const db = openIndex(indexPath);
+  await updateIndex(db, indexPath, flags);
   db.close();
 }
 
@@ -108,10 +113,14 @@ async function runServe(flags: ParsedArgs["flags"]): Promise<void> {
   const host = flagString(flags, "host") ?? "127.0.0.1";
   const db = openIndex(indexPath);
 
-  const { sessionCount } = (await import("./db/query")).getStats(db);
-  if (sessionCount === 0) {
-    process.stdout.write("The index is empty. Run `copilotview index` first.\n");
+  try {
+    await updateIndex(db, indexPath, flags);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Could not update the index: ${reason}\nServing the index as it is.\n`);
   }
+
+  const { sessionCount } = (await import("./db/query")).getStats(db);
 
   const { serve } = await import("@hono/node-server");
   const app = createApp(db);
