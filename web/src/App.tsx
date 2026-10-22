@@ -107,7 +107,7 @@ export function App() {
               </option>
             ))}
           </select>
-          <select value={filters.period} onChange={(e) => update({ period: e.target.value })}>
+          <select aria-label="Period" value={filters.period} onChange={(e) => update({ period: e.target.value })}>
             {PERIODS.map((period) => (
               <option key={period.value} value={period.value}>
                 {period.label}
