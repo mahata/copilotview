@@ -132,6 +132,25 @@ select {
   max-width: 220px;
 }
 
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+}
+
+.date-range input {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  padding: 6px 8px;
+}
+
+.date-range input:invalid {
+  border-color: var(--danger);
+}
+
 .hint {
   color: var(--fg-muted);
   font-size: 12px;
