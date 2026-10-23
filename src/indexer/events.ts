@@ -197,6 +197,9 @@ function handleEvent(acc: Accumulator, event: Record<string, unknown>): void {
     case "session.usage_record":
       acc.usageTracker.usageRecord(data, timestamp);
       break;
+    case "session.compaction_complete":
+      acc.usageTracker.compaction(data, timestamp);
+      break;
     case "session.shutdown":
       acc.usageTracker.shutdown(data, timestamp);
       break;

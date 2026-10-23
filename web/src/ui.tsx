@@ -55,9 +55,9 @@ export function formatTokens(count: number): string {
   return compactNumber.format(count);
 }
 
-/** Premium requests are fractional for models with a multiplier below 1. */
-export function formatPremiumRequests(count: number): string {
-  return count.toLocaleString(undefined, { maximumFractionDigits: 2 });
+/** AI credits are fractional, since models are priced per token. */
+export function formatAiCredits(credits: number): string {
+  return credits.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export function formatMilliseconds(ms: number): string {

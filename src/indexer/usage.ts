@@ -1,18 +1,22 @@
-import type { ParsedUsage, UsageTotals } from "../types";
+import type { ParsedUsage, UsageCounts } from "../types";
 
-type ModelTotals = Map<string, UsageTotals>;
+type Totals = Omit<ParsedUsage, "model" | "timestamp">;
 
-const FIELDS = [
+type ModelTotals = Map<string, Totals>;
+
+const COUNTS = [
   "requests",
-  "premiumRequests",
   "inputTokens",
   "outputTokens",
   "cacheReadTokens",
   "cacheWriteTokens",
-] as const satisfies readonly (keyof UsageTotals)[];
+] as const satisfies readonly (keyof UsageCounts)[];
 
-function emptyTotals(): UsageTotals {
-  return { requests: 0, premiumRequests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+/** The CLI records AI credits as `totalNanoAiu`, in billionths of an AI credit. */
+const NANO_AIU_PER_AI_CREDIT = 1e9;
+
+function emptyTotals(): Totals {
+  return { requests: 0, aiCredits: null, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -27,6 +31,11 @@ function optionalNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function aiCredits(totalNanoAiu: unknown): number | null {
+  const nanoAiu = optionalNumber(totalNanoAiu);
+  return nanoAiu === null ? null : nanoAiu / NANO_AIU_PER_AI_CREDIT;
+}
+
 /** Reads the per-model counters of a `session.shutdown` event, or null when it has none. */
 function readModelMetrics(value: unknown): ModelTotals | null {
   if (value === null || typeof value !== "object") return null;
@@ -37,7 +46,7 @@ function readModelMetrics(value: unknown): ModelTotals | null {
     const usage = asRecord(metrics.usage);
     totals.set(model, {
       requests: asNumber(requests.count),
-      premiumRequests: asNumber(requests.cost),
+      aiCredits: aiCredits(metrics.totalNanoAiu),
       inputTokens: asNumber(usage.inputTokens),
       outputTokens: asNumber(usage.outputTokens),
       cacheReadTokens: asNumber(usage.cacheReadTokens),
@@ -58,7 +67,8 @@ function subtract(current: ModelTotals, previous: ModelTotals): ModelTotals {
   for (const [model, after] of current) {
     const before = previous.get(model) ?? emptyTotals();
     const delta = emptyTotals();
-    for (const field of FIELDS) delta[field] = Math.max(0, after[field] - before[field]);
+    for (const field of COUNTS) delta[field] = Math.max(0, after[field] - before[field]);
+    delta.aiCredits = after.aiCredits === null ? null : Math.max(0, after.aiCredits - (before.aiCredits ?? 0));
     result.set(model, delta);
   }
   return result;
@@ -81,7 +91,8 @@ function reportsOwnRunOnly(current: Shutdown, previous: Shutdown, turns: number)
   if (current.apiDurationMs < previous.apiDurationMs) return true;
   for (const [model, before] of previous.totals) {
     const after = current.totals.get(model) ?? emptyTotals();
-    if (FIELDS.some((field) => after[field] < before[field])) return true;
+    if (COUNTS.some((field) => after[field] < before[field])) return true;
+    if (after.aiCredits !== null && before.aiCredits !== null && after.aiCredits < before.aiCredits) return true;
   }
   const requests = totalRequests(current.totals);
   return Math.abs(requests - turns) < Math.abs(requests - totalRequests(previous.totals) - turns);
@@ -90,7 +101,7 @@ function reportsOwnRunOnly(current: Shutdown, previous: Shutdown, turns: number)
 function toUsage(totals: ModelTotals, timestamp: string | null): ParsedUsage[] {
   const usage: ParsedUsage[] = [];
   for (const [model, t] of totals) {
-    if (FIELDS.some((field) => t[field] !== 0)) usage.push({ model, timestamp, ...t });
+    if (COUNTS.some((field) => t[field] !== 0) || (t.aiCredits ?? 0) !== 0) usage.push({ model, timestamp, ...t });
   }
   return usage;
 }
@@ -107,6 +118,7 @@ export interface UsageTracker {
   startRun(): void;
   turnStarted(): void;
   usageRecord(data: Record<string, unknown>, timestamp: string | null): void;
+  compaction(data: Record<string, unknown>, timestamp: string | null): void;
   shutdown(data: Record<string, unknown>, timestamp: string | null): void;
   finish(): UsageSummary;
 }
@@ -123,14 +135,18 @@ export function createUsageTracker(): UsageTracker {
   let linesRemoved: number | null = null;
   let previous: Shutdown | null = null;
   let turns = 0;
-  let records: ParsedUsage[] = [];
+  let calls: ParsedUsage[] = [];
+  let hasUsageRecords = false;
 
   function endRun(fromShutdown: ParsedUsage[] | null): void {
-    if (records.length > 0) usage.push(...records);
+    // Compactions write no usage record, but shutdown totals include their AI
+    // credits, so they count only alongside usage records.
+    if (hasUsageRecords) usage.push(...calls);
     else if (fromShutdown) usage.push(...fromShutdown);
     else if (turns > 0) unrecordedRuns += 1;
     turns = 0;
-    records = [];
+    calls = [];
+    hasUsageRecords = false;
   }
 
   return {
@@ -145,17 +161,34 @@ export function createUsageTracker(): UsageTracker {
     usageRecord(data, timestamp) {
       const call = asRecord(data.usage);
       if (typeof call.model !== "string" || call.model.length === 0) return;
-      records.push({
+      hasUsageRecords = true;
+      calls.push({
         model: call.model,
         timestamp,
         requests: 1,
-        // `cost` is the model's multiplier on every call, but only calls the user
-        // initiated are billed as premium requests.
-        premiumRequests: call.initiator === "user" ? asNumber(call.cost) : 0,
+        aiCredits: aiCredits(asRecord(call.copilotUsage).totalNanoAiu),
         inputTokens: asNumber(call.inputTokens),
         outputTokens: asNumber(call.outputTokens),
         cacheReadTokens: asNumber(call.cacheReadTokens),
         cacheWriteTokens: asNumber(call.cacheWriteTokens),
+      });
+    },
+
+    compaction(data, timestamp) {
+      const call = asRecord(data.compactionTokensUsed);
+      const credits = aiCredits(asRecord(call.copilotUsage).totalNanoAiu);
+      if (typeof call.model !== "string" || call.model.length === 0 || credits === null) return;
+      // The CLI's model call and token counts leave compactions out, so they
+      // add only AI credits.
+      calls.push({
+        model: call.model,
+        timestamp,
+        requests: 0,
+        aiCredits: credits,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
       });
     },
 

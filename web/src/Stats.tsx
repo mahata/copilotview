@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { api, type Stats } from "./api";
 import { describePeriod, periodRange, type PeriodSelection } from "./period";
 import {
+  formatAiCredits,
   formatBytes,
   formatCount,
   formatMilliseconds,
-  formatPremiumRequests,
   formatTokens,
 } from "./ui";
 
@@ -83,8 +83,8 @@ export function StatsView({ period, periodFrom, periodTo }: PeriodSelection) {
           <div className="stat__label">Source data</div>
         </div>
         <div className="stat">
-          <div className="stat__value">{formatPremiumRequests(usage.premiumRequests)}</div>
-          <div className="stat__label">Premium requests</div>
+          <div className="stat__value">{usage.aiCredits === null ? "—" : formatAiCredits(usage.aiCredits)}</div>
+          <div className="stat__label">AI credits</div>
         </div>
         <div className="stat">
           <div className="stat__value">{formatTokens(usage.inputTokens)}</div>
@@ -111,6 +111,13 @@ export function StatsView({ period, periodFrom, periodTo }: PeriodSelection) {
         </div>
       )}
 
+      {stats.sessionsWithoutAiCredits > 0 && (
+        <div className="stat-note">
+          AI credits don't include usage in {formatCount(stats.sessionsWithoutAiCredits, "session")} recorded by CLI
+          versions that didn't report AI credits.
+        </div>
+      )}
+
       <div className="columns">
         <section className="section">
           <h2>Sessions by month</h2>
@@ -128,15 +135,19 @@ export function StatsView({ period, periodFrom, periodTo }: PeriodSelection) {
         </section>
 
         <section className="section">
-          <h2>Premium requests by model</h2>
+          <h2>AI credits by model</h2>
           <Bars
-            rows={stats.usageByModel
-              .filter((m) => m.premiumRequests > 0)
-              .map((m) => ({
-                label: m.model,
-                value: m.premiumRequests,
-                note: `${formatPremiumRequests(m.premiumRequests)} (${formatCount(m.requests, "request")})`,
-              }))}
+            rows={stats.usageByModel.flatMap((m) =>
+              m.aiCredits !== null && m.aiCredits > 0
+                ? [
+                    {
+                      label: m.model,
+                      value: m.aiCredits,
+                      note: `${formatAiCredits(m.aiCredits)} (${formatCount(m.requests, "request")})`,
+                    },
+                  ]
+                : [],
+            )}
           />
         </section>
 

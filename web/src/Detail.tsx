@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, type SessionDetail, type TimelineEntry, type UsageTotals } from "./api";
 import {
+  formatAiCredits,
   formatCount,
   formatDate,
   formatDuration,
   formatLineChanges,
-  formatPremiumRequests,
   formatTokens,
   sessionTitle,
 } from "./ui";
@@ -16,9 +16,14 @@ const ARTIFACT_LABEL: Record<string, string> = {
   completion: "Completion report",
 };
 
+function describeAiCredits(credits: number | null): string {
+  if (credits === null) return "AI credits not recorded";
+  return `${formatAiCredits(credits)} AI ${credits === 1 ? "credit" : "credits"}`;
+}
+
 function describeUsage(usage: UsageTotals): string {
   return [
-    `${formatPremiumRequests(usage.premiumRequests)} premium ${usage.premiumRequests === 1 ? "request" : "requests"}`,
+    describeAiCredits(usage.aiCredits),
     formatCount(usage.requests, "model request"),
     `${formatTokens(usage.inputTokens)} input tokens (${formatTokens(usage.cacheReadTokens)} cached)`,
     `${formatTokens(usage.outputTokens)} output tokens`,
@@ -29,10 +34,14 @@ function Usage({ usage }: { usage: SessionDetail["usage"] }) {
   if (usage.byModel.length === 0) {
     return <>{usage.unrecordedRuns > 0 ? "Not recorded (the CLI exited without recording it)" : "—"}</>;
   }
+  const { total } = usage;
   return (
     <>
       <div>
-        {describeUsage(usage.total)}
+        {describeUsage(total)}
+        {total.aiCredits !== null &&
+          total.requestsWithoutAiCredits > 0 &&
+          ` (AI credits exclude ${formatCount(total.requestsWithoutAiCredits, "model request")} recorded without them)`}
         {usage.unrecordedRuns > 0 &&
           ` (excludes ${formatCount(usage.unrecordedRuns, "CLI run")} that ended without recording usage)`}
       </div>

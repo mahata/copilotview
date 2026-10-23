@@ -38,7 +38,13 @@ export interface SearchResult {
 
 export interface UsageTotals {
   requests: number;
-  premiumRequests: number;
+  /**
+   * GitHub AI Credits, where 1 AI credit is $0.01 USD; null when there is usage
+   * but none of it recorded AI credits.
+   */
+  aiCredits: number | null;
+  /** Model requests whose usage the CLI recorded without AI credits. */
+  requestsWithoutAiCredits: number;
   /** Includes cached input, i.e. cache reads and cache writes. */
   inputTokens: number;
   outputTokens: number;
@@ -103,6 +109,7 @@ export interface Stats {
   usageByModel: ModelUsage[];
   codeChanges: CodeChanges;
   sessionsWithUnrecordedUsage: number;
+  sessionsWithoutAiCredits: number;
   repositories: { repository: string; count: number }[];
   models: { model: string; count: number }[];
   tools: { toolName: string; count: number; failures: number; medianDurationMs: number | null }[];
