@@ -10,6 +10,27 @@ export const SCHEMA_VERSION = 4;
  */
 const TOKENIZER = "trigram remove_diacritics 1";
 
+const FTS_TRIGGERS = `
+CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
+  INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS artifacts_fts_ai AFTER INSERT ON artifacts BEGIN
+  INSERT INTO artifacts_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+END;
+
+CREATE TRIGGER IF NOT EXISTS artifacts_fts_ad AFTER DELETE ON artifacts BEGIN
+  INSERT INTO artifacts_fts(artifacts_fts, rowid, title, body)
+  VALUES ('delete', old.id, old.title, old.body);
+END;
+`;
+
+const FTS_TRIGGER_NAMES = ["messages_fts_ai", "messages_fts_ad", "artifacts_fts_ai", "artifacts_fts_ad"];
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -132,24 +153,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS artifacts_fts USING fts5(
   content_rowid='id',
   tokenize='${TOKENIZER}'
 );
-
-CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
-  INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
-  INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
-END;
-
-CREATE TRIGGER IF NOT EXISTS artifacts_fts_ai AFTER INSERT ON artifacts BEGIN
-  INSERT INTO artifacts_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
-END;
-
-CREATE TRIGGER IF NOT EXISTS artifacts_fts_ad AFTER DELETE ON artifacts BEGIN
-  INSERT INTO artifacts_fts(artifacts_fts, rowid, title, body)
-  VALUES ('delete', old.id, old.title, old.body);
-END;
-`;
+${FTS_TRIGGERS}`;
 
 export function openDatabase(indexPath: string): Database {
   if (indexPath !== ":memory:") {
@@ -195,6 +199,23 @@ export function migrate(db: Database): void {
   db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)").run(
     String(SCHEMA_VERSION),
   );
+}
+
+/**
+ * Stops the triggers that keep the full-text indexes in step with their
+ * tables. Updating a trigram index row by row takes about twice as long as
+ * building it in one pass, so a full re-index writes every row first and then
+ * calls `rebuildFts` in the same transaction.
+ */
+export function suspendFtsSync(db: Database): void {
+  for (const name of FTS_TRIGGER_NAMES) db.exec(`DROP TRIGGER IF EXISTS ${name}`);
+}
+
+/** Rebuilds the full-text indexes from their tables and restores the triggers that keep them in step. */
+export function rebuildFts(db: Database): void {
+  db.exec("INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')");
+  db.exec("INSERT INTO artifacts_fts(artifacts_fts) VALUES ('rebuild')");
+  db.exec(FTS_TRIGGERS);
 }
 
 export function openIndex(indexPath: string): Database {

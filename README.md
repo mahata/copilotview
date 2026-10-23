@@ -125,6 +125,7 @@ gh workflow run homebrew-tap.yml -f tag=v1.2.3
 
 - The index stores only message text, plans, summaries, file paths, and usage counts; **tool output is not stored**. As a result, 1.2 GB of source data fits in roughly 30 MB.
 - When the schema changes, the index is discarded and rebuilt. This is safe because the source data is always left in place.
+- When copilotview indexes every session — on the first run, after a schema change, or with `--force` — it builds the full-text index in one pass after writing the sessions, which takes about half as long as updating it session by session. Such a run is a single transaction: if it's interrupted, the index stays as it was, and the next run starts over.
 - copilotview does not read `~/.copilot/session-store.db`, because its schema is internal to Copilot and not public.
 
 ## License

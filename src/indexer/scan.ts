@@ -3,6 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Database } from "../db/sqlite";
+import { rebuildFts, suspendFtsSync } from "../db/schema";
 import { createWriter } from "../db/write";
 import { readCheckpoints, readPlan } from "./checkpoints";
 import { parseEventsFile } from "./events";
@@ -21,7 +22,10 @@ export interface IndexProgress {
 export interface IndexOptions {
   force?: boolean;
   onProgress?: (progress: IndexProgress) => void;
-  /** Commit every N sessions so a long run is resumable and memory stays flat. */
+  /**
+   * An incremental update commits every N sessions so an interrupted run keeps
+   * its progress. A full re-index runs in a single transaction instead.
+   */
   batchSize?: number;
 }
 
@@ -78,6 +82,9 @@ export async function indexSessions(
   const dirs = await listSessionDirs(sessionStateDir);
   const seen = new Set<string>();
   const batchSize = options.batchSize ?? 50;
+  // Re-indexing everything builds the full-text indexes in one pass at the end,
+  // atomically, so an interrupted run leaves the previous index as it was.
+  const fullReindex = options.force === true || persisted.size === 0;
 
   let indexed = 0;
   let skipped = 0;
@@ -99,6 +106,11 @@ export async function indexSessions(
   };
 
   try {
+    if (fullReindex) {
+      begin();
+      suspendFtsSync(db);
+    }
+
     for (const id of dirs) {
       scanned += 1;
       const dirPath = path.join(sessionStateDir, id);
@@ -151,7 +163,7 @@ export async function indexSessions(
       });
       indexed += 1;
 
-      if (indexed % batchSize === 0) commit();
+      if (!fullReindex && indexed % batchSize === 0) commit();
       options.onProgress?.({ scanned, total: dirs.length, indexed, skipped, removed: 0, currentId: id });
     }
 
@@ -163,7 +175,10 @@ export async function indexSessions(
         removed += 1;
       }
     }
+    if (fullReindex) rebuildFts(db);
     commit();
+    // The single transaction leaves a write-ahead log about as large as the index.
+    if (fullReindex) db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
     return {
       total: dirs.length,
