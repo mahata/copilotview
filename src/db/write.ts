@@ -57,7 +57,7 @@ export function createWriter(db: Database): IndexWriter {
     `),
     insertUsage: db.prepare(`
       INSERT INTO model_usage (
-        session_id, timestamp, model, requests, premium_requests,
+        session_id, timestamp, model, requests, ai_credits,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
@@ -153,7 +153,7 @@ export function createWriter(db: Database): IndexWriter {
           u.timestamp,
           u.model,
           u.requests,
-          u.premiumRequests,
+          u.aiCredits,
           u.inputTokens,
           u.outputTokens,
           u.cacheReadTokens,

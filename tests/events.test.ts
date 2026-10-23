@@ -159,10 +159,13 @@ describe("tool durations", () => {
 
 interface Metrics {
   count: number;
-  cost: number;
+  /** Omitted for CLI versions that didn't record AI credits. */
+  credits?: number;
   input?: number;
   output?: number;
 }
+
+const NANO_AIU_PER_AI_CREDIT = 1e9;
 
 function start(timestamp: string): string {
   return line({ type: "session.start", timestamp, data: { sessionId: "s1", copilotVersion: "1.0.90" } });
@@ -192,7 +195,8 @@ function shutdown(
         Object.entries(metrics).map(([model, m]) => [
           model,
           {
-            requests: { count: m.count, cost: m.cost },
+            requests: { count: m.count, cost: 1 },
+            totalNanoAiu: m.credits === undefined ? undefined : m.credits * NANO_AIU_PER_AI_CREDIT,
             usage: { inputTokens: m.input ?? 0, outputTokens: m.output ?? 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           },
         ]),
@@ -201,7 +205,7 @@ function shutdown(
   });
 }
 
-function usageRecord(timestamp: string, model: string, initiator: string, cost: number): string {
+function usageRecord(timestamp: string, model: string, initiator: string, credits?: number): string {
   return line({
     type: "session.usage_record",
     timestamp,
@@ -209,21 +213,38 @@ function usageRecord(timestamp: string, model: string, initiator: string, cost: 
       usage: {
         model,
         initiator,
-        cost,
+        cost: 1,
         inputTokens: 100,
         outputTokens: 10,
         cacheReadTokens: 60,
         cacheWriteTokens: 30,
+        copilotUsage: credits === undefined ? undefined : { totalNanoAiu: credits * NANO_AIU_PER_AI_CREDIT },
       },
     },
   });
 }
 
-function totals(text: string): { requests: number; premiumRequests: number; inputTokens: number } {
+function compaction(timestamp: string, model: string, credits?: number): string {
+  return line({
+    type: "session.compaction_complete",
+    timestamp,
+    data: {
+      success: true,
+      compactionTokensUsed: {
+        model,
+        inputTokens: 1000,
+        outputTokens: 100,
+        copilotUsage: credits === undefined ? undefined : { totalNanoAiu: credits * NANO_AIU_PER_AI_CREDIT },
+      },
+    },
+  });
+}
+
+function totals(text: string): { requests: number; aiCredits: number; inputTokens: number } {
   const { usage } = parseEventsText(text);
   return {
     requests: usage.reduce((n, u) => n + u.requests, 0),
-    premiumRequests: usage.reduce((n, u) => n + u.premiumRequests, 0),
+    aiCredits: usage.reduce((n, u) => n + (u.aiCredits ?? 0), 0),
     inputTokens: usage.reduce((n, u) => n + u.inputTokens, 0),
   };
 }
@@ -241,6 +262,7 @@ describe("model usage", () => {
             modelMetrics: {
               "claude-opus-5": {
                 requests: { count: 2, cost: 3 },
+                totalNanoAiu: 190_128_800_000,
                 usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 80, cacheWriteTokens: 5 },
               },
             },
@@ -253,7 +275,7 @@ describe("model usage", () => {
         model: "claude-opus-5",
         timestamp: "2026-05-08T14:00:00.000Z",
         requests: 2,
-        premiumRequests: 3,
+        aiCredits: 190.1288,
         inputTokens: 100,
         outputTokens: 10,
         cacheReadTokens: 80,
@@ -263,21 +285,53 @@ describe("model usage", () => {
     expect(parsed.unrecordedRuns).toBe(0);
   });
 
+  it("leaves AI credits unrecorded for CLI versions that didn't record them", () => {
+    const parsed = parseEventsText(
+      [
+        start("2026-05-08T13:00:00.000Z"),
+        ...turns(1),
+        shutdown("2026-05-08T14:00:00.000Z", { "claude-opus-4.7": { count: 1, input: 100 } }),
+      ].join("\n"),
+    );
+    expect(parsed.usage).toMatchObject([{ model: "claude-opus-4.7", requests: 1, aiCredits: null, inputTokens: 100 }]);
+  });
+
   it("subtracts the previous shutdown when the CLI carried its totals over a resume", () => {
-    const opus = (count: number, cost: number, input: number) => ({ "claude-opus-5": { count, cost, input } });
+    const opus = (count: number, credits: number, input: number) => ({ "claude-opus-5": { count, credits, input } });
     const parsed = parseEventsText(
       [
         start("2026-07-10T00:00:00.000Z"),
         ...turns(2),
-        shutdown("2026-07-10T01:00:00.000Z", opus(2, 1, 100), { apiDurationMs: 1000 }),
+        shutdown("2026-07-10T01:00:00.000Z", opus(2, 10, 100), { apiDurationMs: 1000 }),
         resume("2026-07-11T00:00:00.000Z"),
         ...turns(3),
-        shutdown("2026-07-11T01:00:00.000Z", opus(5, 2, 250), { apiDurationMs: 2500 }),
+        shutdown("2026-07-11T01:00:00.000Z", opus(5, 25, 250), { apiDurationMs: 2500 }),
       ].join("\n"),
     );
     expect(parsed.usage).toMatchObject([
-      { timestamp: "2026-07-10T01:00:00.000Z", requests: 2, premiumRequests: 1, inputTokens: 100 },
-      { timestamp: "2026-07-11T01:00:00.000Z", requests: 3, premiumRequests: 1, inputTokens: 150 },
+      { timestamp: "2026-07-10T01:00:00.000Z", requests: 2, aiCredits: 10, inputTokens: 100 },
+      { timestamp: "2026-07-11T01:00:00.000Z", requests: 3, aiCredits: 15, inputTokens: 150 },
+    ]);
+  });
+
+  it("counts all AI credits of the first shutdown that recorded them", () => {
+    const parsed = parseEventsText(
+      [
+        start("2026-05-11T00:00:00.000Z"),
+        ...turns(2),
+        shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-4.7": { count: 2, input: 20 } }, { apiDurationMs: 200 }),
+        resume("2026-05-12T00:00:00.000Z"),
+        ...turns(1),
+        shutdown(
+          "2026-05-12T01:00:00.000Z",
+          { "claude-opus-4.7": { count: 3, credits: 5, input: 30 } },
+          { apiDurationMs: 300 },
+        ),
+      ].join("\n"),
+    );
+    expect(parsed.usage).toMatchObject([
+      { requests: 2, aiCredits: null, inputTokens: 20 },
+      { requests: 1, aiCredits: 5, inputTokens: 10 },
     ]);
   });
 
@@ -285,71 +339,86 @@ describe("model usage", () => {
     const log = [
       start("2026-05-10T00:00:00.000Z"),
       ...turns(4),
-      shutdown("2026-05-10T01:00:00.000Z", { "claude-opus-5": { count: 4, cost: 2, input: 400 } }, { apiDurationMs: 4000 }),
+      shutdown(
+        "2026-05-10T01:00:00.000Z",
+        { "claude-opus-5": { count: 4, credits: 20, input: 400 } },
+        { apiDurationMs: 4000 },
+      ),
       resume("2026-05-11T00:00:00.000Z"),
       ...turns(1),
-      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 1, cost: 1, input: 50 } }, { apiDurationMs: 500 }),
+      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 1, credits: 5, input: 50 } }, { apiDurationMs: 500 }),
     ].join("\n");
-    expect(totals(log)).toEqual({ requests: 5, premiumRequests: 3, inputTokens: 450 });
+    expect(totals(log)).toEqual({ requests: 5, aiCredits: 25, inputTokens: 450 });
   });
 
   it("treats a shutdown missing a model the previous one had as reporting only its own run", () => {
     const log = [
       start("2026-05-10T00:00:00.000Z"),
       ...turns(1),
-      shutdown("2026-05-10T01:00:00.000Z", { "gpt-5.5": { count: 1, cost: 1 } }),
+      shutdown("2026-05-10T01:00:00.000Z", { "gpt-5.5": { count: 1, credits: 1 } }),
       resume("2026-05-11T00:00:00.000Z"),
       ...turns(4),
-      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 4, cost: 3 } }),
+      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 4, credits: 3 } }),
     ].join("\n");
-    expect(totals(log)).toMatchObject({ requests: 5, premiumRequests: 4 });
+    expect(totals(log)).toMatchObject({ requests: 5, aiCredits: 4 });
+  });
+
+  it("treats a shutdown whose AI credits went down as reporting only its own run", () => {
+    const log = [
+      start("2026-05-10T00:00:00.000Z"),
+      ...turns(2),
+      shutdown("2026-05-10T01:00:00.000Z", { "claude-opus-5": { count: 2, credits: 10, input: 20 } }),
+      resume("2026-05-11T00:00:00.000Z"),
+      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 2, credits: 4, input: 20 } }),
+    ].join("\n");
+    expect(totals(log)).toEqual({ requests: 4, aiCredits: 14, inputTokens: 40 });
   });
 
   it("tells a growing shutdown that reported only its own run by the run's model turns", () => {
     const log = [
       start("2026-05-10T00:00:00.000Z"),
       ...turns(1),
-      shutdown("2026-05-10T01:00:00.000Z", { "claude-opus-5": { count: 1, cost: 1, input: 10 } }, { apiDurationMs: 100 }),
+      shutdown("2026-05-10T01:00:00.000Z", { "claude-opus-5": { count: 1, credits: 1, input: 10 } }, { apiDurationMs: 100 }),
       resume("2026-05-11T00:00:00.000Z"),
       ...turns(3),
-      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 3, cost: 1, input: 30 } }, { apiDurationMs: 300 }),
+      shutdown("2026-05-11T01:00:00.000Z", { "claude-opus-5": { count: 3, credits: 3, input: 30 } }, { apiDurationMs: 300 }),
     ].join("\n");
-    expect(totals(log)).toEqual({ requests: 4, premiumRequests: 2, inputTokens: 40 });
+    expect(totals(log)).toEqual({ requests: 4, aiCredits: 4, inputTokens: 40 });
   });
 
   it("does not count a resume without model calls twice", () => {
     const carriedOver = [
       start("2026-08-01T00:00:00.000Z"),
       ...turns(2),
-      shutdown("2026-08-01T01:00:00.000Z", { "claude-opus-5": { count: 2, cost: 1, input: 20 } }, { apiDurationMs: 200 }),
+      shutdown("2026-08-01T01:00:00.000Z", { "claude-opus-5": { count: 2, credits: 1, input: 20 } }, { apiDurationMs: 200 }),
       resume("2026-08-02T00:00:00.000Z"),
-      shutdown("2026-08-02T01:00:00.000Z", { "claude-opus-5": { count: 2, cost: 1, input: 20 } }, { apiDurationMs: 200 }),
+      shutdown("2026-08-02T01:00:00.000Z", { "claude-opus-5": { count: 2, credits: 1, input: 20 } }, { apiDurationMs: 200 }),
     ].join("\n");
-    expect(totals(carriedOver)).toEqual({ requests: 2, premiumRequests: 1, inputTokens: 20 });
+    expect(totals(carriedOver)).toEqual({ requests: 2, aiCredits: 1, inputTokens: 20 });
 
     const reset = [
       start("2026-05-01T00:00:00.000Z"),
       ...turns(2),
-      shutdown("2026-05-01T01:00:00.000Z", { "claude-opus-5": { count: 2, cost: 1, input: 20 } }, { apiDurationMs: 200 }),
+      shutdown("2026-05-01T01:00:00.000Z", { "claude-opus-5": { count: 2, credits: 1, input: 20 } }, { apiDurationMs: 200 }),
       resume("2026-05-02T00:00:00.000Z"),
-      shutdown("2026-05-02T01:00:00.000Z", { "claude-opus-5": { count: 0, cost: 0, input: 0 } }),
+      shutdown("2026-05-02T01:00:00.000Z", { "claude-opus-5": { count: 0, credits: 0, input: 0 } }),
     ].join("\n");
     expect(parseEventsText(reset).usage).toHaveLength(1);
-    expect(totals(reset)).toEqual({ requests: 2, premiumRequests: 1, inputTokens: 20 });
+    expect(totals(reset)).toEqual({ requests: 2, aiCredits: 1, inputTokens: 20 });
   });
 
-  it("prefers per-call usage records and bills only calls the user initiated", () => {
+  it("prefers per-call usage records and counts the AI credits of every call", () => {
     const parsed = parseEventsText(
       [
         start("2026-10-20T00:00:00.000Z"),
         ...turns(1),
-        usageRecord("2026-10-20T00:01:00.000Z", "claude-opus-5.5", "user", 15),
+        usageRecord("2026-10-20T00:01:00.000Z", "claude-opus-5.5", "user", 40),
         ...turns(1),
-        usageRecord("2026-10-20T00:02:00.000Z", "claude-opus-5.5", "agent", 15),
-        usageRecord("2026-10-20T00:03:00.000Z", "gpt-5.6-sol", "sub-agent", 1),
+        usageRecord("2026-10-20T00:02:00.000Z", "claude-opus-5.5", "agent", 20),
+        usageRecord("2026-10-20T00:03:00.000Z", "gpt-5.6-sol", "sub-agent", 0.5),
         shutdown("2026-10-20T01:00:00.000Z", {
-          "claude-opus-5.5": { count: 2, cost: 15, input: 200 },
-          "gpt-5.6-sol": { count: 1, cost: 0, input: 100 },
+          "claude-opus-5.5": { count: 2, credits: 60, input: 200 },
+          "gpt-5.6-sol": { count: 1, credits: 0.5, input: 100 },
         }),
       ].join("\n"),
     );
@@ -358,15 +427,63 @@ describe("model usage", () => {
         model: "claude-opus-5.5",
         timestamp: "2026-10-20T00:01:00.000Z",
         requests: 1,
-        premiumRequests: 15,
+        aiCredits: 40,
         inputTokens: 100,
         outputTokens: 10,
         cacheReadTokens: 60,
         cacheWriteTokens: 30,
       },
-      expect.objectContaining({ model: "claude-opus-5.5", timestamp: "2026-10-20T00:02:00.000Z", premiumRequests: 0 }),
-      expect.objectContaining({ model: "gpt-5.6-sol", timestamp: "2026-10-20T00:03:00.000Z", premiumRequests: 0 }),
+      expect.objectContaining({ model: "claude-opus-5.5", timestamp: "2026-10-20T00:02:00.000Z", aiCredits: 20 }),
+      expect.objectContaining({ model: "gpt-5.6-sol", timestamp: "2026-10-20T00:03:00.000Z", aiCredits: 0.5 }),
     ]);
+  });
+
+  it("adds the AI credits of compactions, which write no usage record, to usage records", () => {
+    const parsed = parseEventsText(
+      [
+        start("2026-10-20T00:00:00.000Z"),
+        ...turns(1),
+        usageRecord("2026-10-20T00:01:00.000Z", "claude-opus-5.5", "user", 40),
+        compaction("2026-10-20T00:02:00.000Z", "claude-opus-5.5", 30),
+        shutdown("2026-10-20T01:00:00.000Z", { "claude-opus-5.5": { count: 1, credits: 70, input: 100 } }),
+      ].join("\n"),
+    );
+    expect(parsed.usage).toEqual([
+      expect.objectContaining({ timestamp: "2026-10-20T00:01:00.000Z", requests: 1, aiCredits: 40 }),
+      {
+        model: "claude-opus-5.5",
+        timestamp: "2026-10-20T00:02:00.000Z",
+        requests: 0,
+        aiCredits: 30,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    ]);
+  });
+
+  it("does not add compactions to usage from a shutdown, whose AI credits include them", () => {
+    const log = [
+      start("2026-09-20T00:00:00.000Z"),
+      ...turns(1),
+      compaction("2026-09-20T00:02:00.000Z", "claude-sonnet-5", 30),
+      shutdown("2026-09-20T01:00:00.000Z", { "claude-sonnet-5": { count: 1, credits: 70, input: 100 } }),
+    ].join("\n");
+    expect(totals(log)).toEqual({ requests: 1, aiCredits: 70, inputTokens: 100 });
+  });
+
+  it("leaves AI credits unrecorded for usage records without them and skips such compactions", () => {
+    const parsed = parseEventsText(
+      [
+        start("2026-10-20T00:00:00.000Z"),
+        ...turns(1),
+        usageRecord("2026-10-20T00:01:00.000Z", "claude-opus-5.5", "user"),
+        compaction("2026-10-20T00:02:00.000Z", "claude-opus-5.5"),
+      ].join("\n"),
+    );
+    expect(parsed.usage).toMatchObject([{ requests: 1, aiCredits: null }]);
+    expect(parsed.usage).toHaveLength(1);
   });
 
   it("counts runs that called a model without recording usage", () => {
@@ -391,7 +508,7 @@ describe("model usage", () => {
         usageRecord("2026-10-20T00:01:00.000Z", "claude-opus-5.5", "user", 15),
       ].join("\n"),
     );
-    expect(parsed).toMatchObject({ usage: [{ requests: 1, premiumRequests: 15 }], unrecordedRuns: 0 });
+    expect(parsed).toMatchObject({ usage: [{ requests: 1, aiCredits: 15 }], unrecordedRuns: 0 });
   });
 
   it("takes code changes from the last shutdown, since every CLI reports them cumulatively", () => {

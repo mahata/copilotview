@@ -39,9 +39,8 @@ export interface ParsedToolCall {
   durationMs: number | null;
 }
 
-export interface UsageTotals {
+export interface UsageCounts {
   requests: number;
-  premiumRequests: number;
   /** Includes cached input, i.e. cache reads and cache writes. */
   inputTokens: number;
   outputTokens: number;
@@ -50,9 +49,18 @@ export interface UsageTotals {
 }
 
 /** Model usage attributed to the time it was recorded. */
-export interface ParsedUsage extends UsageTotals {
+export interface ParsedUsage extends UsageCounts {
   model: string;
   timestamp: string | null;
+  /** GitHub AI Credits, where 1 AI credit is $0.01 USD; null when the CLI didn't record them. */
+  aiCredits: number | null;
+}
+
+export interface UsageTotals extends UsageCounts {
+  /** Null when there is usage but none of it recorded AI credits. */
+  aiCredits: number | null;
+  /** Model requests whose usage the CLI recorded without AI credits. */
+  requestsWithoutAiCredits: number;
 }
 
 export type ArtifactKind = "task_complete" | "checkpoint" | "plan";

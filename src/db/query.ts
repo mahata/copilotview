@@ -126,9 +126,11 @@ function whereAll(conditions: string[]): string {
   return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 }
 
+/** `ai_credits` is NULL for usage the CLI recorded without AI credits. */
 const USAGE_SUMS = `
   COALESCE(SUM(u.requests), 0) AS requests,
-  COALESCE(SUM(u.premium_requests), 0) AS premium_requests,
+  CASE WHEN COUNT(*) = 0 THEN 0 ELSE SUM(u.ai_credits) END AS ai_credits,
+  COALESCE(SUM(CASE WHEN u.ai_credits IS NULL THEN u.requests ELSE 0 END), 0) AS requests_without_ai_credits,
   COALESCE(SUM(u.input_tokens), 0) AS input_tokens,
   COALESCE(SUM(u.output_tokens), 0) AS output_tokens,
   COALESCE(SUM(u.cache_read_tokens), 0) AS cache_read_tokens,
@@ -138,7 +140,8 @@ const USAGE_SUMS = `
 function toUsageTotals(row: Row): UsageTotals {
   return {
     requests: Number(row.requests ?? 0),
-    premiumRequests: Number(row.premium_requests ?? 0),
+    aiCredits: row.ai_credits === null || row.ai_credits === undefined ? null : Number(row.ai_credits),
+    requestsWithoutAiCredits: Number(row.requests_without_ai_credits ?? 0),
     inputTokens: Number(row.input_tokens ?? 0),
     outputTokens: Number(row.output_tokens ?? 0),
     cacheReadTokens: Number(row.cache_read_tokens ?? 0),
@@ -150,7 +153,7 @@ function toModelUsage(row: Row): ModelUsage {
   return { model: String(row.model), ...toUsageTotals(row) };
 }
 
-const BY_USAGE = "premium_requests DESC, requests DESC, u.model";
+const BY_USAGE = "ai_credits DESC, requests DESC, u.model";
 
 export function listSessions(
   db: Database,
@@ -521,6 +524,8 @@ export interface Stats {
   codeChanges: CodeChanges;
   /** Sessions with CLI runs that called a model but recorded no usage. */
   sessionsWithUnrecordedUsage: number;
+  /** Sessions with usage in the period that the CLI recorded without AI credits. */
+  sessionsWithoutAiCredits: number;
   repositories: { repository: string; count: number }[];
   models: { model: string; count: number }[];
   tools: { toolName: string; count: number; failures: number; medianDurationMs: number | null }[];
@@ -561,14 +566,15 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
     )
     .get(...toolFilter.params) as Row;
 
-  const usage = toUsageTotals(
-    db
-      .prepare(
-        `SELECT ${USAGE_SUMS} FROM model_usage u JOIN sessions s ON s.id = u.session_id
-         ${whereAll(usageFilter.sql)}`,
-      )
-      .get(...usageFilter.params) as Row,
-  );
+  const usageRow = db
+    .prepare(
+      `SELECT ${USAGE_SUMS},
+         COUNT(DISTINCT CASE WHEN u.ai_credits IS NULL THEN u.session_id END) AS sessions_without_ai_credits
+       FROM model_usage u JOIN sessions s ON s.id = u.session_id
+       ${whereAll(usageFilter.sql)}`,
+    )
+    .get(...usageFilter.params) as Row;
+  const usage = toUsageTotals(usageRow);
 
   const usageByModel = (
     db
@@ -665,6 +671,7 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
     usageByModel,
     codeChanges: { linesAdded: Number(totals.lines_added ?? 0), linesRemoved: Number(totals.lines_removed ?? 0) },
     sessionsWithUnrecordedUsage: Number(totals.unrecorded ?? 0),
+    sessionsWithoutAiCredits: Number(usageRow.sessions_without_ai_credits ?? 0),
     repositories,
     models,
     tools,

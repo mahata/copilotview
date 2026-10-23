@@ -198,7 +198,7 @@ describe("indexer end to end", () => {
   it("reports no usage or code changes for sessions that recorded none", () => {
     expect(getSession(db, "aaaa")).toMatchObject({
       usage: {
-        total: { requests: 0, premiumRequests: 0, inputTokens: 0, outputTokens: 0 },
+        total: { requests: 0, aiCredits: 0, requestsWithoutAiCredits: 0, inputTokens: 0, outputTokens: 0 },
         byModel: [],
         unrecordedRuns: 0,
       },
@@ -377,19 +377,20 @@ function toolCall(id: string, toolName: string, startedAt: string, completedAt: 
   ];
 }
 
-function usageRecord(timestamp: string, initiator: string): unknown {
+function usageRecord(timestamp: string, credits: number): unknown {
   return {
     type: "session.usage_record",
     timestamp,
     data: {
       usage: {
         model: "claude-opus-5.5",
-        initiator,
+        initiator: "agent",
         cost: 15,
         inputTokens: 100,
         outputTokens: 10,
         cacheReadTokens: 60,
         cacheWriteTokens: 30,
+        copilotUsage: { totalNanoAiu: credits * 1e9 },
       },
     },
   };
@@ -413,18 +414,31 @@ describe("usage statistics", () => {
     writeSession("records", "2026-10-20T00:00:00.000Z", [
       { type: "session.start", timestamp: "2026-09-01T00:00:00.000Z", data: { sessionId: "records" } },
       { type: "assistant.turn_start", data: {} },
-      usageRecord("2026-09-01T00:01:00.000Z", "user"),
+      usageRecord("2026-09-01T00:01:00.000Z", 15),
       ...toolCall("b1", "bash", "2026-09-01T00:02:00.000Z", "2026-09-01T00:02:00.010Z"),
       ...toolCall("b2", "bash", "2026-09-01T00:03:00.000Z", "2026-09-01T00:03:00.020Z"),
       ...toolCall("b3", "bash", "2026-09-01T00:04:00.000Z", "2026-09-01T00:04:01.000Z"),
       { type: "assistant.turn_start", data: {} },
-      usageRecord("2026-10-10T00:00:00.000Z", "agent"),
+      usageRecord("2026-10-10T00:00:00.000Z", 2),
+      {
+        type: "session.compaction_complete",
+        timestamp: "2026-10-10T00:30:00.000Z",
+        data: {
+          compactionTokensUsed: { model: "claude-opus-5.5", copilotUsage: { totalNanoAiu: 0.5 * 1e9 } },
+        },
+      },
       {
         type: "session.shutdown",
         timestamp: "2026-10-10T01:00:00.000Z",
         data: {
           codeChanges: { linesAdded: 30, linesRemoved: 5 },
-          modelMetrics: { "claude-opus-5.5": { requests: { count: 2, cost: 15 }, usage: { inputTokens: 200 } } },
+          modelMetrics: {
+            "claude-opus-5.5": {
+              requests: { count: 2, cost: 15 },
+              totalNanoAiu: 17.5 * 1e9,
+              usage: { inputTokens: 200 },
+            },
+          },
         },
       },
     ]);
@@ -456,22 +470,24 @@ describe("usage statistics", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("totals usage, code changes, and sessions with unrecorded usage", () => {
+  it("totals usage, code changes, and sessions with usage left out", () => {
     expect(getStats(db)).toMatchObject({
       usage: {
         requests: 4,
-        premiumRequests: 17,
+        aiCredits: 17.5,
+        requestsWithoutAiCredits: 2,
         inputTokens: 240,
         outputTokens: 24,
         cacheReadTokens: 120,
         cacheWriteTokens: 60,
       },
       usageByModel: [
-        { model: "claude-opus-5.5", requests: 2, premiumRequests: 15 },
-        { model: "gpt-5.5", requests: 2, premiumRequests: 2 },
+        { model: "claude-opus-5.5", requests: 2, aiCredits: 17.5, requestsWithoutAiCredits: 0 },
+        { model: "gpt-5.5", requests: 2, aiCredits: null, requestsWithoutAiCredits: 2 },
       ],
       codeChanges: { linesAdded: 37, linesRemoved: 6 },
       sessionsWithUnrecordedUsage: 1,
+      sessionsWithoutAiCredits: 1,
     });
   });
 
@@ -482,17 +498,19 @@ describe("usage statistics", () => {
     ]);
   });
 
-  it("counts usage by when it was recorded", () => {
+  it("counts usage, and sessions with usage recorded without AI credits, by when it was recorded", () => {
     expect(getStats(db, { from: october })).toMatchObject({
-      usage: { requests: 1, premiumRequests: 0 },
-      usageByModel: [{ model: "claude-opus-5.5", requests: 1 }],
+      usage: { requests: 1, aiCredits: 2.5, requestsWithoutAiCredits: 0 },
+      usageByModel: [{ model: "claude-opus-5.5", requests: 1, aiCredits: 2.5 }],
+      sessionsWithoutAiCredits: 0,
     });
     expect(getStats(db, { to: endOfSeptember })).toMatchObject({
-      usage: { requests: 3, premiumRequests: 17 },
+      usage: { requests: 3, aiCredits: 15, requestsWithoutAiCredits: 2 },
       usageByModel: [
-        { model: "claude-opus-5.5", requests: 1 },
-        { model: "gpt-5.5", requests: 2 },
+        { model: "claude-opus-5.5", requests: 1, aiCredits: 15 },
+        { model: "gpt-5.5", requests: 2, aiCredits: null },
       ],
+      sessionsWithoutAiCredits: 1,
     });
   });
 
@@ -510,14 +528,21 @@ describe("usage statistics", () => {
   it("breaks down a session's usage by model", () => {
     expect(getSession(db, "records")).toMatchObject({
       usage: {
-        total: { requests: 2, premiumRequests: 15, inputTokens: 200, outputTokens: 20, cacheReadTokens: 120 },
-        byModel: [{ model: "claude-opus-5.5", requests: 2, premiumRequests: 15 }],
+        total: {
+          requests: 2,
+          aiCredits: 17.5,
+          requestsWithoutAiCredits: 0,
+          inputTokens: 200,
+          outputTokens: 20,
+          cacheReadTokens: 120,
+        },
+        byModel: [{ model: "claude-opus-5.5", requests: 2, aiCredits: 17.5 }],
         unrecordedRuns: 0,
       },
       codeChanges: { linesAdded: 30, linesRemoved: 5 },
     });
     expect(getSession(db, "shutdowns")).toMatchObject({
-      usage: { total: { requests: 2, premiumRequests: 2 }, unrecordedRuns: 1 },
+      usage: { total: { requests: 2, aiCredits: null, requestsWithoutAiCredits: 2 }, unrecordedRuns: 1 },
       codeChanges: { linesAdded: 7, linesRemoved: 1 },
     });
   });
@@ -525,11 +550,12 @@ describe("usage statistics", () => {
   it("serves usage with statistics and session details", async () => {
     const app = createApp(db);
     expect(await (await app.request(`/api/stats?from=${october}`)).json()).toMatchObject({
-      usage: { requests: 1 },
+      usage: { requests: 1, aiCredits: 2.5 },
       sessionsWithUnrecordedUsage: 1,
+      sessionsWithoutAiCredits: 0,
     });
     expect(await (await app.request("/api/sessions/shutdowns")).json()).toMatchObject({
-      usage: { unrecordedRuns: 1 },
+      usage: { total: { aiCredits: null }, unrecordedRuns: 1 },
       codeChanges: { linesAdded: 7 },
     });
   });
