@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Stats } from "./api";
-import { PERIODS, periodStart } from "./period";
+import { describePeriod, periodRange, type PeriodSelection } from "./period";
 import { formatBytes } from "./ui";
 
 function Bars({ rows }: { rows: { label: string; value: number; note?: string }[] }) {
@@ -22,7 +22,7 @@ function Bars({ rows }: { rows: { label: string; value: number; note?: string }[
   );
 }
 
-export function StatsView({ period }: { period: string }) {
+export function StatsView({ period, periodFrom, periodTo }: PeriodSelection) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +31,7 @@ export function StatsView({ period }: { period: string }) {
     setStats(null);
     setError(null);
     api
-      .stats({ from: periodStart(period, Date.now()) })
+      .stats(periodRange({ period, periodFrom, periodTo }, Date.now()))
       .then((result) => {
         if (!cancelled) setStats(result);
       })
@@ -41,18 +41,14 @@ export function StatsView({ period }: { period: string }) {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, periodFrom, periodTo]);
 
   if (error) return <div className="empty">Failed to load: {error}</div>;
   if (!stats) return <div className="empty">Loading...</div>;
 
-  const selectedPeriod = PERIODS.find((preset) => preset.value === period);
-  const coverage =
-    selectedPeriod?.days === undefined ? "the complete index" : `the ${selectedPeriod.label.toLowerCase()}`;
-
   return (
     <>
-      <div className="result-count">Statistics for {coverage}</div>
+      <div className="result-count">Statistics {describePeriod({ period, periodFrom, periodTo })}</div>
 
       <div className="stat-grid">
         <div className="stat">

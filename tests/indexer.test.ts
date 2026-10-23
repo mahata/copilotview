@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/sqlite";
 import { openIndex } from "../src/db/schema";
-import { getSession, getStats, getTimeline, listSessions, search } from "../src/db/query";
+import { getSession, getStats, getTimeline, listSessions, search, type SearchResult } from "../src/db/query";
 import { indexSessions } from "../src/indexer/scan";
 import { createApp } from "../src/server/app";
 
@@ -342,5 +342,19 @@ describe("period filter", () => {
   it("serves statistics for the requested period", async () => {
     const response = await createApp(db).request(`/api/stats?from=${afterLastUpdate}`);
     expect(await response.json()).toMatchObject({ sessionCount: 0, messageCount: 1, toolCallCount: 1 });
+  });
+
+  it("serves sessions, matches, and statistics between both ends of a period", async () => {
+    const app = createApp(db);
+    const period = `from=${beforeLastUpdate}&to=${afterLastUpdate}`;
+
+    expect(await (await app.request(`/api/sessions?${period}`)).json()).toMatchObject({ total: 1 });
+    const matches = (await (await app.request(`/api/search?q=zebra&scope=user&${period}`)).json()) as SearchResult;
+    expect(matches.hits.map((hit) => hit.snippet.text)).toEqual(["zebra undated"]);
+    expect(await (await app.request(`/api/stats?${period}`)).json()).toMatchObject({
+      sessionCount: 1,
+      messageCount: 1,
+      toolCallCount: 0,
+    });
   });
 });
