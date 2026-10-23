@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 import type { ParsedEvents } from "../types";
+import { createUsageTracker, type UsageSummary, type UsageTracker } from "./usage";
 
 /** Tool arguments whose values point at a file in the workspace. */
 const PATH_KEYS = ["path", "file", "filePath", "file_path", "filename"];
@@ -39,13 +40,21 @@ function extractTarget(toolName: string, args: Record<string, unknown>): string 
   return null;
 }
 
-interface Accumulator extends ParsedEvents {
+function elapsedMs(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  const ms = Date.parse(end) - Date.parse(start);
+  return Number.isFinite(ms) && ms >= 0 ? ms : null;
+}
+
+interface Accumulator extends Omit<ParsedEvents, keyof UsageSummary> {
   seq: number;
+  usageTracker: UsageTracker;
 }
 
 function emptyAccumulator(): Accumulator {
   return {
     seq: 0,
+    usageTracker: createUsageTracker(),
     messages: [],
     toolCalls: [],
     artifacts: [],
@@ -72,6 +81,7 @@ function handleEvent(acc: Accumulator, event: Record<string, unknown>): void {
 
   switch (type) {
     case "session.start": {
+      acc.usageTracker.startRun();
       acc.copilotVersion = asString(data.copilotVersion) ?? acc.copilotVersion;
       const model = asString(data.selectedModel);
       if (model && !acc.models.includes(model)) acc.models.push(model);
@@ -137,6 +147,7 @@ function handleEvent(acc: Accumulator, event: Record<string, unknown>): void {
         target: extractTarget(toolName, args),
         success: null,
         timestamp,
+        durationMs: null,
       });
       const filePath = extractPath(args);
       if (filePath) acc.files.push({ path: filePath, toolName });
@@ -145,14 +156,13 @@ function handleEvent(acc: Accumulator, event: Record<string, unknown>): void {
     case "tool.execution_complete": {
       const toolCallId = asString(data.toolCallId);
       if (!toolCallId) break;
-      const success = data.success === true ? 1 : data.success === false ? 0 : null;
-      if (success === null) break;
       for (let i = acc.toolCalls.length - 1; i >= 0; i -= 1) {
         const call = acc.toolCalls[i]!;
-        if (call.toolCallId === toolCallId) {
-          call.success = success;
-          break;
-        }
+        if (call.toolCallId !== toolCallId) continue;
+        if (data.success === true) call.success = 1;
+        else if (data.success === false) call.success = 0;
+        call.durationMs = elapsedMs(call.timestamp, timestamp);
+        break;
       }
       break;
     }
@@ -178,15 +188,27 @@ function handleEvent(acc: Accumulator, event: Record<string, unknown>): void {
       });
       break;
     }
+    case "session.resume":
+      acc.usageTracker.startRun();
+      break;
+    case "assistant.turn_start":
+      acc.usageTracker.turnStarted();
+      break;
+    case "session.usage_record":
+      acc.usageTracker.usageRecord(data, timestamp);
+      break;
+    case "session.shutdown":
+      acc.usageTracker.shutdown(data, timestamp);
+      break;
     default:
       break;
   }
 }
 
 function finalize(acc: Accumulator): ParsedEvents {
-  const { seq, ...rest } = acc;
+  const { seq, usageTracker, ...rest } = acc;
   void seq;
-  return rest;
+  return { ...rest, ...usageTracker.finish() };
 }
 
 /** Parses a JSONL event log already held in memory. Used by tests. */

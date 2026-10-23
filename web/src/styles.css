@@ -284,6 +284,11 @@ mark {
   word-break: break-all;
 }
 
+.kv dd.kv__prose {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 .section {
   margin-top: 24px;
 }
@@ -405,6 +410,12 @@ pre.body {
 .stat__label {
   color: var(--fg-muted);
   font-size: 12px;
+}
+
+.stat-note {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: -14px 0 24px;
 }
 
 .bars {

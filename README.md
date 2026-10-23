@@ -7,10 +7,10 @@ It treats the source data as read-only and builds a search index at `~/.copilotv
 ## Features
 
 - **Full-text search** — Search across all sessions, optionally scoped to your messages, Copilot responses, plans and summaries, or file names. Filter by repository, model, and period: a preset from the past 24 hours to the past year, or a custom range of dates.
-- **Session browsing** — View the conversation timeline, tool call log, files touched, plans, and completion reports.
-- **Statistics** — See sessions by month and usage trends by repository, model, and tool, across the complete index or the same periods as search.
+- **Session browsing** — View the conversation timeline, tool call log, files touched, plans, completion reports, and the session's premium requests, tokens, and lines changed.
+- **Statistics** — See sessions by month; usage trends by repository, model, and tool; premium requests and tokens by model; lines added and removed; and median tool durations, across the complete index or the same periods as search.
 
-copilotview does not call an LLM to produce summaries. Instead, it gathers and displays information each session already records: the `summary` field in `workspace.yaml`, completion reports, checkpoints, and aggregate counts.
+copilotview does not call an LLM to produce summaries. Instead, it gathers and displays information each session already records: the `summary` field in `workspace.yaml`, completion reports, checkpoints, the usage the CLI records, and aggregate counts.
 
 ## Installation
 
@@ -75,7 +75,20 @@ The period filter compares the time shown on each result: the time a message was
 
 A custom range covers whole days in your browser's time zone, from the start of the first day through the end of the last. Leave either date empty to leave that end of the range open.
 
-The selected period also applies to the Statistics page. It counts sessions, along with their repositories, models, branches, and source data, by the session's last update, as the session list does, and Sessions by month still groups them by the month they were created. It counts messages by the time they were sent and tool calls by the time they were made.
+The selected period also applies to the Statistics page. It counts sessions, along with their repositories, models, branches, and source data, by the session's last update, as the session list does, and Sessions by month still groups them by the month they were created. It counts messages by the time they were sent and tool calls by the time they were made. Usage, lines changed, and tool durations follow the rules in [How usage is counted](#how-usage-is-counted).
+
+## How usage is counted
+
+When it exits, the CLI writes a `session.shutdown` event with the session's premium requests, tokens, and lines added and removed. Recent versions also write a `session.usage_record` event for each model call. copilotview takes the usage of each CLI run, from starting or resuming a session to exiting, from its usage records if the CLI wrote them, and otherwise from its shutdown event.
+
+- Premium requests count only the calls made for prompts you send, at the model's multiplier. Calls Copilot makes on its own while working on a prompt, including those of subagents, add tokens but no premium requests. This matches the totals the CLI reports.
+- Input tokens include cached input, so the Statistics page also shows the share of input tokens read from the cache.
+- CLI 1.0.65 and earlier reset their counts when you resumed a session, while later versions carry them over. Shutdown events don't say which CLI wrote them, so copilotview tells the two apart by comparing the number of model calls in each run with the counts the event reports.
+- A run that called a model but exited without writing either kind of event, typically because the CLI crashed or was killed, has no usage to count. The Statistics page shows how many sessions in the period this affects, and the session page notes it too.
+- Lines added and removed are what the CLI reported in its last shutdown event, so they leave out changes from a run that is still going or that ended without one.
+- A tool's duration runs from the start of a call to its completion, including any time spent waiting for your approval or answer. The Statistics page therefore shows each tool's median duration, which a few long waits don't skew.
+
+With a period selected, usage counts by when it was recorded: the time of each call, or for usage taken from a shutdown event, the time the run ended. Lines changed and the number of sessions with unrecorded usage count by the session's last update, as other session statistics do. Tool durations count by when the call was made.
 
 ## Development
 
@@ -109,7 +122,7 @@ gh workflow run homebrew-tap.yml -f tag=v1.2.3
 
 ## Design notes
 
-- The index stores only message text, plans, summaries, and file paths; **tool output is not stored**. As a result, 1.2 GB of source data fits in roughly 30 MB.
+- The index stores only message text, plans, summaries, file paths, and usage counts; **tool output is not stored**. As a result, 1.2 GB of source data fits in roughly 30 MB.
 - When the schema changes, the index is discarded and rebuilt. This is safe because the source data is always left in place.
 - copilotview does not read `~/.copilot/session-store.db`, because its schema is internal to Copilot and not public.
 
