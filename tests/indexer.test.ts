@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/sqlite";
 import { openDatabase, openIndex } from "../src/db/schema";
 import { getSession, getStats, getTimeline, listSessions, search, type SearchResult } from "../src/db/query";
@@ -222,6 +222,95 @@ describe("indexer end to end", () => {
     expect(third).toMatchObject({ indexed: 1, skipped: 0, removed: 1 });
     expect(listSessions(db).total).toBe(1);
     expect(search(db, "flaky").total).toBe(0);
+  });
+});
+
+describe("full re-index", () => {
+  let root: string;
+  let db: Database;
+
+  function triggers(target: Database = db): string[] {
+    const rows = target.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all();
+    return (rows as { name: string }[]).map((r) => r.name);
+  }
+
+  /** Throws when a full-text index has drifted from the table it indexes. */
+  function checkFullTextIndexes(): void {
+    db.exec("INSERT INTO messages_fts(messages_fts, rank) VALUES ('integrity-check', 1)");
+    db.exec("INSERT INTO artifacts_fts(artifacts_fts, rank) VALUES ('integrity-check', 1)");
+  }
+
+  function interrupt(): never {
+    throw new Error("interrupted");
+  }
+
+  beforeEach(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-reindex-test-"));
+    makeSession(root, "aaaa", { repository: "acme/demo", branch: "main", content: "グラフ描画を実装してください" });
+    makeSession(root, "bbbb", { repository: "acme/other", branch: "dev", content: "Fix the flaky test runner" });
+    db = openIndex(":memory:");
+    await indexSessions(db, root);
+  });
+
+  afterEach(() => {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("builds the full-text indexes and restores the triggers that keep them in step", () => {
+    expect(triggers()).toEqual(["artifacts_fts_ad", "artifacts_fts_ai", "messages_fts_ad", "messages_fts_ai"]);
+    checkFullTextIndexes();
+    expect(search(db, "flaky").total).toBe(1);
+  });
+
+  it("keeps the full-text indexes in step through later incremental updates", async () => {
+    makeSession(root, "bbbb", { repository: "acme/other", branch: "dev", content: "Speed up the indexer" });
+    expect(await indexSessions(db, root)).toMatchObject({ indexed: 1, skipped: 1 });
+    expect(search(db, "flaky").total).toBe(0);
+    expect(search(db, "indexer").total).toBe(1);
+    checkFullTextIndexes();
+  });
+
+  it("replaces the full-text indexes on a forced run", async () => {
+    fs.rmSync(path.join(root, "bbbb"), { recursive: true });
+    expect(await indexSessions(db, root, { force: true })).toMatchObject({ indexed: 1, removed: 1 });
+    expect(search(db, "flaky").total).toBe(0);
+    expect(search(db, "グラフ描画").total).toBeGreaterThan(0);
+    expect(triggers()).toHaveLength(4);
+    checkFullTextIndexes();
+  });
+
+  it("leaves the previous index as it was when a forced run fails", async () => {
+    fs.rmSync(path.join(root, "bbbb"), { recursive: true });
+    await expect(indexSessions(db, root, { force: true, onProgress: interrupt })).rejects.toThrow("interrupted");
+    expect(listSessions(db).total).toBe(2);
+    expect(search(db, "flaky").total).toBe(1);
+    expect(triggers()).toHaveLength(4);
+    checkFullTextIndexes();
+  });
+
+  it("leaves a new index empty when its first build fails", async () => {
+    const fresh = openIndex(":memory:");
+    try {
+      await expect(indexSessions(fresh, root, { onProgress: interrupt })).rejects.toThrow("interrupted");
+      expect(listSessions(fresh).total).toBe(0);
+      expect(triggers(fresh)).toHaveLength(4);
+    } finally {
+      fresh.close();
+    }
+  });
+
+  it("truncates the write-ahead log it grew", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-wal-test-"));
+    const file = path.join(dir, "index.db");
+    const fileDb = openIndex(file);
+    try {
+      await indexSessions(fileDb, root);
+      expect(fs.statSync(`${file}-wal`).size).toBe(0);
+    } finally {
+      fileDb.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
