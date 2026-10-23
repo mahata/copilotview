@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Facets } from "./api";
 import { Browse } from "./Browse";
 import { Detail } from "./Detail";
-import { PERIODS } from "./period";
+import { CUSTOM_PERIOD, PERIODS } from "./period";
 import { StatsView } from "./Stats";
 
 type Route = { view: "browse" } | { view: "stats" } | { view: "session"; id: string };
@@ -21,6 +21,8 @@ export interface Filters {
   branch: string;
   model: string;
   period: string;
+  periodFrom: string;
+  periodTo: string;
   sort: string;
   nonEmpty: boolean;
 }
@@ -32,6 +34,8 @@ const EMPTY_FILTERS: Filters = {
   branch: "",
   model: "",
   period: "",
+  periodFrom: "",
+  periodTo: "",
   sort: "recent",
   nonEmpty: true,
 };
@@ -60,8 +64,8 @@ export function App() {
     if (route.view !== "browse") go("/");
   };
 
-  const updatePeriod = (period: string) => {
-    setFilters((prev) => ({ ...prev, period }));
+  const updatePeriod = (patch: Partial<Pick<Filters, "period" | "periodFrom" | "periodTo">>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
     if (route.view === "session") go("/");
   };
 
@@ -112,13 +116,32 @@ export function App() {
               </option>
             ))}
           </select>
-          <select aria-label="Period" value={filters.period} onChange={(e) => updatePeriod(e.target.value)}>
+          <select aria-label="Period" value={filters.period} onChange={(e) => updatePeriod({ period: e.target.value })}>
             {PERIODS.map((period) => (
               <option key={period.value} value={period.value}>
                 {period.label}
               </option>
             ))}
           </select>
+          {filters.period === CUSTOM_PERIOD && (
+            <span className="date-range">
+              <input
+                type="date"
+                aria-label="Start date"
+                value={filters.periodFrom}
+                max={filters.periodTo || undefined}
+                onChange={(e) => updatePeriod({ periodFrom: e.target.value })}
+              />
+              <span aria-hidden="true">–</span>
+              <input
+                type="date"
+                aria-label="End date"
+                value={filters.periodTo}
+                min={filters.periodFrom || undefined}
+                onChange={(e) => updatePeriod({ periodTo: e.target.value })}
+              />
+            </span>
+          )}
           {filters.q.trim() === "" && (
             <select value={filters.sort} onChange={(e) => update({ sort: e.target.value })}>
               <option value="recent">Newest first</option>
@@ -144,7 +167,7 @@ export function App() {
       </header>
 
       {route.view === "stats" ? (
-        <StatsView period={filters.period} />
+        <StatsView period={filters.period} periodFrom={filters.periodFrom} periodTo={filters.periodTo} />
       ) : route.view === "session" ? (
         <Detail id={route.id} onBack={() => go("/")} />
       ) : (
