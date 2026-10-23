@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type Database } from "./sqlite";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * `trigram` is the only built-in tokenizer that indexes Japanese text, since
@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   tool_call_count INTEGER NOT NULL DEFAULT 0,
   file_count INTEGER NOT NULL DEFAULT 0,
   artifact_count INTEGER NOT NULL DEFAULT 0,
+  lines_added INTEGER,
+  lines_removed INTEGER,
+  unrecorded_runs INTEGER NOT NULL DEFAULT 0,
   malformed_lines INTEGER NOT NULL DEFAULT 0,
   source_size INTEGER NOT NULL DEFAULT 0,
   source_mtime INTEGER NOT NULL DEFAULT 0,
@@ -72,11 +75,27 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   tool_name TEXT NOT NULL,
   target TEXT,
   success INTEGER,
-  timestamp TEXT
+  timestamp TEXT,
+  duration_ms INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name);
+
+CREATE TABLE IF NOT EXISTS model_usage (
+  id INTEGER PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  timestamp TEXT,
+  model TEXT NOT NULL,
+  requests INTEGER NOT NULL DEFAULT 0,
+  premium_requests REAL NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage(session_id);
 
 CREATE TABLE IF NOT EXISTS artifacts (
   id INTEGER PRIMARY KEY,
@@ -164,6 +183,7 @@ export function migrate(db: Database): void {
       "artifacts_fts",
       "session_files",
       "artifacts",
+      "model_usage",
       "tool_calls",
       "messages",
       "sessions",

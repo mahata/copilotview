@@ -1,12 +1,50 @@
 import { useEffect, useState } from "react";
-import { api, type SessionDetail, type TimelineEntry } from "./api";
-import { formatCount, formatDate, formatDuration, sessionTitle } from "./ui";
+import { api, type SessionDetail, type TimelineEntry, type UsageTotals } from "./api";
+import {
+  formatCount,
+  formatDate,
+  formatDuration,
+  formatLineChanges,
+  formatPremiumRequests,
+  formatTokens,
+  sessionTitle,
+} from "./ui";
 
 const ARTIFACT_LABEL: Record<string, string> = {
   plan: "Plan",
   checkpoint: "Checkpoint",
   completion: "Completion report",
 };
+
+function describeUsage(usage: UsageTotals): string {
+  return [
+    `${formatPremiumRequests(usage.premiumRequests)} premium ${usage.premiumRequests === 1 ? "request" : "requests"}`,
+    formatCount(usage.requests, "model request"),
+    `${formatTokens(usage.inputTokens)} input tokens (${formatTokens(usage.cacheReadTokens)} cached)`,
+    `${formatTokens(usage.outputTokens)} output tokens`,
+  ].join(", ");
+}
+
+function Usage({ usage }: { usage: SessionDetail["usage"] }) {
+  if (usage.byModel.length === 0) {
+    return <>{usage.unrecordedRuns > 0 ? "Not recorded (the CLI exited without recording it)" : "—"}</>;
+  }
+  return (
+    <>
+      <div>
+        {describeUsage(usage.total)}
+        {usage.unrecordedRuns > 0 &&
+          ` (excludes ${formatCount(usage.unrecordedRuns, "CLI run")} that ended without recording usage)`}
+      </div>
+      {usage.byModel.length > 1 &&
+        usage.byModel.map((model) => (
+          <div key={model.model}>
+            {model.model}: {describeUsage(model)}
+          </div>
+        ))}
+    </>
+  );
+}
 
 function ToolLine({ entry }: { entry: Extract<TimelineEntry, { kind: "tool" }> }) {
   return (
@@ -111,6 +149,12 @@ export function Detail({ id, onBack }: { id: string; onBack: () => void }) {
             {formatCount(session.assistantMessageCount, "message")} from Copilot,{" "}
             {formatCount(session.toolCallCount, "tool call")}, {formatCount(session.fileCount, "file")}
           </dd>
+          <dt>Usage</dt>
+          <dd className="kv__prose">
+            <Usage usage={detail.usage} />
+          </dd>
+          <dt>Code changes</dt>
+          <dd>{detail.codeChanges ? `${formatLineChanges(detail.codeChanges)} lines` : "—"}</dd>
           <dt>Session ID</dt>
           <dd>{session.id}</dd>
           <dt>Source data</dt>

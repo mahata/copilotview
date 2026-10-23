@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/sqlite";
-import { openIndex } from "../src/db/schema";
+import { openDatabase, openIndex } from "../src/db/schema";
 import { getSession, getStats, getTimeline, listSessions, search, type SearchResult } from "../src/db/query";
 import { indexSessions } from "../src/indexer/scan";
 import { createApp } from "../src/server/app";
@@ -191,8 +191,19 @@ describe("indexer end to end", () => {
     expect(stats.messageCount).toBe(4);
     expect(stats.toolCallCount).toBe(2);
     expect(stats.models).toEqual([{ model: "claude-opus-5", count: 2 }]);
-    expect(stats.tools).toEqual([{ toolName: "edit", count: 2, failures: 0 }]);
+    expect(stats.tools).toEqual([{ toolName: "edit", count: 2, failures: 0, medianDurationMs: 34 }]);
     expect(stats.monthly).toEqual([{ month: "2026-05", count: 2 }]);
+  });
+
+  it("reports no usage or code changes for sessions that recorded none", () => {
+    expect(getSession(db, "aaaa")).toMatchObject({
+      usage: {
+        total: { requests: 0, premiumRequests: 0, inputTokens: 0, outputTokens: 0 },
+        byModel: [],
+        unrecordedRuns: 0,
+      },
+      codeChanges: null,
+    });
   });
 
   it("refreshes when non-event inputs change", async () => {
@@ -356,5 +367,198 @@ describe("period filter", () => {
       messageCount: 1,
       toolCallCount: 0,
     });
+  });
+});
+
+function toolCall(id: string, toolName: string, startedAt: string, completedAt: string): unknown[] {
+  return [
+    { type: "tool.execution_start", timestamp: startedAt, data: { toolCallId: id, toolName, arguments: {} } },
+    { type: "tool.execution_complete", timestamp: completedAt, data: { toolCallId: id, success: true } },
+  ];
+}
+
+function usageRecord(timestamp: string, initiator: string): unknown {
+  return {
+    type: "session.usage_record",
+    timestamp,
+    data: {
+      usage: {
+        model: "claude-opus-5.5",
+        initiator,
+        cost: 15,
+        inputTokens: 100,
+        outputTokens: 10,
+        cacheReadTokens: 60,
+        cacheWriteTokens: 30,
+      },
+    },
+  };
+}
+
+describe("usage statistics", () => {
+  const october = "2026-10-01T00:00:00.000Z";
+  const endOfSeptember = "2026-09-30T23:59:59.999Z";
+  let root: string;
+  let db: Database;
+
+  function writeSession(id: string, updatedAt: string, events: unknown[]): void {
+    const dir = path.join(root, id);
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "workspace.yaml"), `id: ${id}\nupdated_at: ${updatedAt}\n`);
+    fs.writeFileSync(path.join(dir, "events.jsonl"), jsonl(...events));
+  }
+
+  beforeAll(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-usage-test-"));
+    writeSession("records", "2026-10-20T00:00:00.000Z", [
+      { type: "session.start", timestamp: "2026-09-01T00:00:00.000Z", data: { sessionId: "records" } },
+      { type: "assistant.turn_start", data: {} },
+      usageRecord("2026-09-01T00:01:00.000Z", "user"),
+      ...toolCall("b1", "bash", "2026-09-01T00:02:00.000Z", "2026-09-01T00:02:00.010Z"),
+      ...toolCall("b2", "bash", "2026-09-01T00:03:00.000Z", "2026-09-01T00:03:00.020Z"),
+      ...toolCall("b3", "bash", "2026-09-01T00:04:00.000Z", "2026-09-01T00:04:01.000Z"),
+      { type: "assistant.turn_start", data: {} },
+      usageRecord("2026-10-10T00:00:00.000Z", "agent"),
+      {
+        type: "session.shutdown",
+        timestamp: "2026-10-10T01:00:00.000Z",
+        data: {
+          codeChanges: { linesAdded: 30, linesRemoved: 5 },
+          modelMetrics: { "claude-opus-5.5": { requests: { count: 2, cost: 15 }, usage: { inputTokens: 200 } } },
+        },
+      },
+    ]);
+    writeSession("shutdowns", "2026-10-05T00:00:00.000Z", [
+      { type: "session.start", timestamp: "2026-09-02T00:00:00.000Z", data: { sessionId: "shutdowns" } },
+      { type: "assistant.turn_start", data: {} },
+      { type: "session.resume", timestamp: "2026-09-03T00:00:00.000Z", data: {} },
+      { type: "assistant.turn_start", data: {} },
+      { type: "assistant.turn_start", data: {} },
+      ...toolCall("v1", "view", "2026-09-03T00:01:00.000Z", "2026-09-03T00:01:00.010Z"),
+      ...toolCall("v2", "view", "2026-09-03T00:02:00.000Z", "2026-09-03T00:02:00.020Z"),
+      {
+        type: "session.shutdown",
+        timestamp: "2026-09-03T01:00:00.000Z",
+        data: {
+          codeChanges: { linesAdded: 7, linesRemoved: 1 },
+          modelMetrics: {
+            "gpt-5.5": { requests: { count: 2, cost: 2 }, usage: { inputTokens: 40, outputTokens: 4 } },
+          },
+        },
+      },
+    ]);
+    db = openIndex(":memory:");
+    await indexSessions(db, root);
+  });
+
+  afterAll(() => {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("totals usage, code changes, and sessions with unrecorded usage", () => {
+    expect(getStats(db)).toMatchObject({
+      usage: {
+        requests: 4,
+        premiumRequests: 17,
+        inputTokens: 240,
+        outputTokens: 24,
+        cacheReadTokens: 120,
+        cacheWriteTokens: 60,
+      },
+      usageByModel: [
+        { model: "claude-opus-5.5", requests: 2, premiumRequests: 15 },
+        { model: "gpt-5.5", requests: 2, premiumRequests: 2 },
+      ],
+      codeChanges: { linesAdded: 37, linesRemoved: 6 },
+      sessionsWithUnrecordedUsage: 1,
+    });
+  });
+
+  it("reports the median duration of each tool", () => {
+    expect(getStats(db).tools).toEqual([
+      { toolName: "bash", count: 3, failures: 0, medianDurationMs: 20 },
+      { toolName: "view", count: 2, failures: 0, medianDurationMs: 15 },
+    ]);
+  });
+
+  it("counts usage by when it was recorded", () => {
+    expect(getStats(db, { from: october })).toMatchObject({
+      usage: { requests: 1, premiumRequests: 0 },
+      usageByModel: [{ model: "claude-opus-5.5", requests: 1 }],
+    });
+    expect(getStats(db, { to: endOfSeptember })).toMatchObject({
+      usage: { requests: 3, premiumRequests: 17 },
+      usageByModel: [
+        { model: "claude-opus-5.5", requests: 1 },
+        { model: "gpt-5.5", requests: 2 },
+      ],
+    });
+  });
+
+  it("counts code changes and unrecorded usage by the session's last update", () => {
+    expect(getStats(db, { from: october })).toMatchObject({
+      codeChanges: { linesAdded: 37, linesRemoved: 6 },
+      sessionsWithUnrecordedUsage: 1,
+    });
+    expect(getStats(db, { to: endOfSeptember })).toMatchObject({
+      codeChanges: { linesAdded: 0, linesRemoved: 0 },
+      sessionsWithUnrecordedUsage: 0,
+    });
+  });
+
+  it("breaks down a session's usage by model", () => {
+    expect(getSession(db, "records")).toMatchObject({
+      usage: {
+        total: { requests: 2, premiumRequests: 15, inputTokens: 200, outputTokens: 20, cacheReadTokens: 120 },
+        byModel: [{ model: "claude-opus-5.5", requests: 2, premiumRequests: 15 }],
+        unrecordedRuns: 0,
+      },
+      codeChanges: { linesAdded: 30, linesRemoved: 5 },
+    });
+    expect(getSession(db, "shutdowns")).toMatchObject({
+      usage: { total: { requests: 2, premiumRequests: 2 }, unrecordedRuns: 1 },
+      codeChanges: { linesAdded: 7, linesRemoved: 1 },
+    });
+  });
+
+  it("serves usage with statistics and session details", async () => {
+    const app = createApp(db);
+    expect(await (await app.request(`/api/stats?from=${october}`)).json()).toMatchObject({
+      usage: { requests: 1 },
+      sessionsWithUnrecordedUsage: 1,
+    });
+    expect(await (await app.request("/api/sessions/shutdowns")).json()).toMatchObject({
+      usage: { unrecordedRuns: 1 },
+      codeChanges: { linesAdded: 7 },
+    });
+  });
+});
+
+describe("schema migration", () => {
+  it("rebuilds an index created with an older schema", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-migrate-test-"));
+    try {
+      const file = path.join(dir, "index.db");
+      const old = openDatabase(file);
+      old.exec(`
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO meta (key, value) VALUES ('schema_version', '2');
+        CREATE TABLE tool_calls (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL,
+          tool_name TEXT NOT NULL, target TEXT, success INTEGER, timestamp TEXT);
+      `);
+      old.close();
+
+      const db = openIndex(file);
+      const columns = (db.prepare("SELECT name FROM pragma_table_info('tool_calls')").all() as { name: string }[]).map(
+        (c) => c.name,
+      );
+      const usageTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_usage'").get();
+      db.close();
+      expect(columns).toContain("duration_ms");
+      expect(usageTable).toBeDefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

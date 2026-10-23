@@ -1,6 +1,18 @@
 import type { Database } from "./sqlite";
+import type { UsageTotals } from "../types";
 import { likePattern, parseQuery, type ParsedQuery } from "./fts";
 import { makeSnippet, type Snippet } from "./snippet";
+
+export type { UsageTotals };
+
+export interface ModelUsage extends UsageTotals {
+  model: string;
+}
+
+export interface CodeChanges {
+  linesAdded: number;
+  linesRemoved: number;
+}
 
 export interface SessionSummary {
   id: string;
@@ -113,6 +125,32 @@ function filterClauses(
 function whereAll(conditions: string[]): string {
   return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 }
+
+const USAGE_SUMS = `
+  COALESCE(SUM(u.requests), 0) AS requests,
+  COALESCE(SUM(u.premium_requests), 0) AS premium_requests,
+  COALESCE(SUM(u.input_tokens), 0) AS input_tokens,
+  COALESCE(SUM(u.output_tokens), 0) AS output_tokens,
+  COALESCE(SUM(u.cache_read_tokens), 0) AS cache_read_tokens,
+  COALESCE(SUM(u.cache_write_tokens), 0) AS cache_write_tokens
+`;
+
+function toUsageTotals(row: Row): UsageTotals {
+  return {
+    requests: Number(row.requests ?? 0),
+    premiumRequests: Number(row.premium_requests ?? 0),
+    inputTokens: Number(row.input_tokens ?? 0),
+    outputTokens: Number(row.output_tokens ?? 0),
+    cacheReadTokens: Number(row.cache_read_tokens ?? 0),
+    cacheWriteTokens: Number(row.cache_write_tokens ?? 0),
+  };
+}
+
+function toModelUsage(row: Row): ModelUsage {
+  return { model: String(row.model), ...toUsageTotals(row) };
+}
+
+const BY_USAGE = "premium_requests DESC, requests DESC, u.model";
 
 export function listSessions(
   db: Database,
@@ -303,6 +341,14 @@ export interface SessionDetail {
   artifacts: { kind: string; ordinal: number; title: string | null; body: string }[];
   files: { path: string; toolName: string | null; touchCount: number }[];
   toolUsage: { toolName: string; count: number; failures: number }[];
+  usage: {
+    total: UsageTotals;
+    byModel: ModelUsage[];
+    /** CLI runs that called a model but recorded no usage. */
+    unrecordedRuns: number;
+  };
+  /** Null when the CLI never reported code changes for the session. */
+  codeChanges: CodeChanges | null;
 }
 
 export function getSession(db: Database, id: string): SessionDetail | null {
@@ -345,6 +391,18 @@ export function getSession(db: Database, id: string): SessionDetail | null {
     failures: Number(t.failures ?? 0),
   }));
 
+  const usageByModel = (
+    db
+      .prepare(
+        `SELECT u.model, ${USAGE_SUMS} FROM model_usage u WHERE u.session_id = ?
+         GROUP BY u.model ORDER BY ${BY_USAGE}`,
+      )
+      .all(id) as Row[]
+  ).map(toModelUsage);
+  const usageTotal = toUsageTotals(
+    db.prepare(`SELECT ${USAGE_SUMS} FROM model_usage u WHERE u.session_id = ?`).get(id) as Row,
+  );
+
   return {
     session: {
       ...toSummary(row),
@@ -360,6 +418,15 @@ export function getSession(db: Database, id: string): SessionDetail | null {
     artifacts,
     files,
     toolUsage,
+    usage: {
+      total: usageTotal,
+      byModel: usageByModel,
+      unrecordedRuns: Number(row.unrecorded_runs ?? 0),
+    },
+    codeChanges:
+      row.lines_added === null && row.lines_removed === null
+        ? null
+        : { linesAdded: Number(row.lines_added ?? 0), linesRemoved: Number(row.lines_removed ?? 0) },
   };
 }
 
@@ -449,9 +516,14 @@ export interface Stats {
   messageCount: number;
   toolCallCount: number;
   indexedBytes: number;
+  usage: UsageTotals;
+  usageByModel: ModelUsage[];
+  codeChanges: CodeChanges;
+  /** Sessions with CLI runs that called a model but recorded no usage. */
+  sessionsWithUnrecordedUsage: number;
   repositories: { repository: string; count: number }[];
   models: { model: string; count: number }[];
-  tools: { toolName: string; count: number; failures: number }[];
+  tools: { toolName: string; count: number; failures: number; medianDurationMs: number | null }[];
   monthly: { month: string; count: number }[];
   branches: { branch: string; count: number }[];
 }
@@ -464,10 +536,13 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
   const sessionFilter = filterClauses(period, "s.updated_at");
   const messageFilter = filterClauses(period, "COALESCE(m.timestamp, s.updated_at)");
   const toolFilter = filterClauses(period, "COALESCE(t.timestamp, s.updated_at)");
+  const usageFilter = filterClauses(period, "COALESCE(u.timestamp, s.updated_at)");
 
   const totals = db
     .prepare(
-      `SELECT COUNT(*) AS sessions, COALESCE(SUM(source_size), 0) AS bytes
+      `SELECT COUNT(*) AS sessions, COALESCE(SUM(source_size), 0) AS bytes,
+         COALESCE(SUM(lines_added), 0) AS lines_added, COALESCE(SUM(lines_removed), 0) AS lines_removed,
+         COALESCE(SUM(CASE WHEN unrecorded_runs > 0 THEN 1 ELSE 0 END), 0) AS unrecorded
        FROM sessions s ${whereAll(sessionFilter.sql)}`,
     )
     .get(...sessionFilter.params) as Row;
@@ -485,6 +560,25 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
        ${whereAll(toolFilter.sql)}`,
     )
     .get(...toolFilter.params) as Row;
+
+  const usage = toUsageTotals(
+    db
+      .prepare(
+        `SELECT ${USAGE_SUMS} FROM model_usage u JOIN sessions s ON s.id = u.session_id
+         ${whereAll(usageFilter.sql)}`,
+      )
+      .get(...usageFilter.params) as Row,
+  );
+
+  const usageByModel = (
+    db
+      .prepare(
+        `SELECT u.model, ${USAGE_SUMS} FROM model_usage u JOIN sessions s ON s.id = u.session_id
+         ${whereAll(usageFilter.sql)}
+         GROUP BY u.model ORDER BY ${BY_USAGE} LIMIT 30`,
+      )
+      .all(...usageFilter.params) as Row[]
+  ).map(toModelUsage);
 
   const repositories = (
     db
@@ -506,6 +600,27 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
       .all(...sessionFilter.params) as Row[]
   ).map((r) => ({ model: String(r.model), count: Number(r.count) }));
 
+  // Median rather than mean: a call's duration includes time spent waiting
+  // for permission prompts and user input, which leaves a long tail.
+  const medianDurations = new Map(
+    (
+      db
+        .prepare(
+          `WITH timed AS (
+             SELECT t.tool_name, t.duration_ms,
+               ROW_NUMBER() OVER (PARTITION BY t.tool_name ORDER BY t.duration_ms) AS position,
+               COUNT(*) OVER (PARTITION BY t.tool_name) AS total
+             FROM tool_calls t JOIN sessions s ON s.id = t.session_id
+             ${whereAll(["t.duration_ms IS NOT NULL", ...toolFilter.sql])}
+           )
+           SELECT tool_name, AVG(duration_ms) AS median FROM timed
+           WHERE position IN ((total + 1) / 2, (total + 2) / 2)
+           GROUP BY tool_name`,
+        )
+        .all(...toolFilter.params) as Row[]
+    ).map((r) => [String(r.tool_name), Math.round(Number(r.median))] as const),
+  );
+
   const tools = (
     db
       .prepare(
@@ -514,7 +629,12 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
          GROUP BY tool_name ORDER BY count DESC LIMIT 30`,
       )
       .all(...toolFilter.params) as Row[]
-  ).map((r) => ({ toolName: String(r.tool_name), count: Number(r.count), failures: Number(r.failures ?? 0) }));
+  ).map((r) => ({
+    toolName: String(r.tool_name),
+    count: Number(r.count),
+    failures: Number(r.failures ?? 0),
+    medianDurationMs: medianDurations.get(String(r.tool_name)) ?? null,
+  }));
 
   const monthly = (
     db
@@ -541,6 +661,10 @@ export function getStats(db: Database, period: StatsPeriod = {}): Stats {
     messageCount: Number(messages.count),
     toolCallCount: Number(toolCalls.count),
     indexedBytes: Number(totals.bytes ?? 0),
+    usage,
+    usageByModel,
+    codeChanges: { linesAdded: Number(totals.lines_added ?? 0), linesRemoved: Number(totals.lines_removed ?? 0) },
+    sessionsWithUnrecordedUsage: Number(totals.unrecorded ?? 0),
     repositories,
     models,
     tools,

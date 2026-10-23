@@ -29,6 +29,7 @@ export function createWriter(db: Database): IndexWriter {
     deleteSession: db.prepare("DELETE FROM sessions WHERE id = ?"),
     deleteMessages: db.prepare("DELETE FROM messages WHERE session_id = ?"),
     deleteTools: db.prepare("DELETE FROM tool_calls WHERE session_id = ?"),
+    deleteUsage: db.prepare("DELETE FROM model_usage WHERE session_id = ?"),
     deleteArtifacts: db.prepare("DELETE FROM artifacts WHERE session_id = ?"),
     deleteFiles: db.prepare("DELETE FROM session_files WHERE session_id = ?"),
     insertSession: db.prepare(`
@@ -36,12 +37,14 @@ export function createWriter(db: Database): IndexWriter {
         id, dir_path, name, summary, repository, host_type, branch, cwd, git_root,
         head_commit, copilot_version, models, created_at, updated_at, started_at, ended_at,
         duration_ms, user_message_count, assistant_message_count, tool_call_count,
-        file_count, artifact_count, malformed_lines, source_size, source_mtime, source_fingerprint, indexed_at
+        file_count, artifact_count, lines_added, lines_removed, unrecorded_runs,
+        malformed_lines, source_size, source_mtime, source_fingerprint, indexed_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?
       )
     `),
     insertMessage: db.prepare(`
@@ -49,8 +52,14 @@ export function createWriter(db: Database): IndexWriter {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertTool: db.prepare(`
-      INSERT INTO tool_calls (session_id, seq, tool_name, target, success, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO tool_calls (session_id, seq, tool_name, target, success, timestamp, duration_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertUsage: db.prepare(`
+      INSERT INTO model_usage (
+        session_id, timestamp, model, requests, premium_requests,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertArtifact: db.prepare(`
       INSERT INTO artifacts (session_id, kind, ordinal, title, body) VALUES (?, ?, ?, ?, ?)
@@ -64,6 +73,7 @@ export function createWriter(db: Database): IndexWriter {
   function removeSession(sessionId: string): void {
     stmts.deleteMessages.run(sessionId);
     stmts.deleteTools.run(sessionId);
+    stmts.deleteUsage.run(sessionId);
     stmts.deleteArtifacts.run(sessionId);
     stmts.deleteFiles.run(sessionId);
     stmts.deleteSession.run(sessionId);
@@ -111,6 +121,9 @@ export function createWriter(db: Database): IndexWriter {
         events.toolCalls.length,
         uniqueFiles.size,
         artifacts.length,
+        events.linesAdded,
+        events.linesRemoved,
+        events.unrecordedRuns,
         events.malformedLines,
         sourceSize,
         sourceMtime,
@@ -132,7 +145,20 @@ export function createWriter(db: Database): IndexWriter {
         );
       }
       for (const t of events.toolCalls) {
-        stmts.insertTool.run(id, t.seq, t.toolName, t.target, t.success, t.timestamp);
+        stmts.insertTool.run(id, t.seq, t.toolName, t.target, t.success, t.timestamp, t.durationMs);
+      }
+      for (const u of events.usage) {
+        stmts.insertUsage.run(
+          id,
+          u.timestamp,
+          u.model,
+          u.requests,
+          u.premiumRequests,
+          u.inputTokens,
+          u.outputTokens,
+          u.cacheReadTokens,
+          u.cacheWriteTokens,
+        );
       }
       for (const a of artifacts) {
         stmts.insertArtifact.run(id, a.kind, a.ordinal, a.title, a.body);

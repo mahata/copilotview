@@ -36,6 +36,25 @@ export interface SearchResult {
   fallbackTerms: string[];
 }
 
+export interface UsageTotals {
+  requests: number;
+  premiumRequests: number;
+  /** Includes cached input, i.e. cache reads and cache writes. */
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+export interface ModelUsage extends UsageTotals {
+  model: string;
+}
+
+export interface CodeChanges {
+  linesAdded: number;
+  linesRemoved: number;
+}
+
 export interface SessionDetail {
   session: SessionSummary & {
     hostType: string | null;
@@ -50,6 +69,8 @@ export interface SessionDetail {
   artifacts: { kind: string; ordinal: number; title: string | null; body: string }[];
   files: { path: string; toolName: string | null; touchCount: number }[];
   toolUsage: { toolName: string; count: number; failures: number }[];
+  usage: { total: UsageTotals; byModel: ModelUsage[]; unrecordedRuns: number };
+  codeChanges: CodeChanges | null;
 }
 
 export type TimelineEntry =
@@ -78,9 +99,13 @@ export interface Stats {
   messageCount: number;
   toolCallCount: number;
   indexedBytes: number;
+  usage: UsageTotals;
+  usageByModel: ModelUsage[];
+  codeChanges: CodeChanges;
+  sessionsWithUnrecordedUsage: number;
   repositories: { repository: string; count: number }[];
   models: { model: string; count: number }[];
-  tools: { toolName: string; count: number; failures: number }[];
+  tools: { toolName: string; count: number; failures: number; medianDurationMs: number | null }[];
   monthly: { month: string; count: number }[];
   branches: { branch: string; count: number }[];
 }

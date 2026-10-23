@@ -36,6 +36,23 @@ export interface ParsedToolCall {
   target: string | null;
   success: number | null;
   timestamp: string | null;
+  durationMs: number | null;
+}
+
+export interface UsageTotals {
+  requests: number;
+  premiumRequests: number;
+  /** Includes cached input, i.e. cache reads and cache writes. */
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+/** Model usage attributed to the time it was recorded. */
+export interface ParsedUsage extends UsageTotals {
+  model: string;
+  timestamp: string | null;
 }
 
 export type ArtifactKind = "task_complete" | "checkpoint" | "plan";
@@ -52,6 +69,11 @@ export interface ParsedEvents {
   toolCalls: ParsedToolCall[];
   artifacts: ParsedArtifact[];
   files: { path: string; toolName: string }[];
+  usage: ParsedUsage[];
+  /** CLI runs that called a model but recorded no usage, e.g. because they crashed. */
+  unrecordedRuns: number;
+  linesAdded: number | null;
+  linesRemoved: number | null;
   models: string[];
   copilotVersion: string | null;
   startedAt: string | null;

@@ -49,6 +49,27 @@ export function formatCount(count: number, singular: string, plural = `${singula
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
+const compactNumber = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+export function formatTokens(count: number): string {
+  return compactNumber.format(count);
+}
+
+/** Premium requests are fractional for models with a multiplier below 1. */
+export function formatPremiumRequests(count: number): string {
+  return count.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+export function formatMilliseconds(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${(ms / 60_000).toFixed(1)} min`;
+}
+
+export function formatLineChanges(changes: { linesAdded: number; linesRemoved: number }): string {
+  return `+${changes.linesAdded.toLocaleString()} / −${changes.linesRemoved.toLocaleString()}`;
+}
+
 export function sessionTitle(session: { name: string | null; summary: string | null; id: string }): string {
   const candidate = session.name ?? session.summary;
   if (!candidate) return session.id.slice(0, 8);
