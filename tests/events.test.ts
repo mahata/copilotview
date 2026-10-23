@@ -1,8 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { parseEventsText } from "../src/indexer/events";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parseEventsFile, parseEventsText } from "../src/indexer/events";
 
 function line(obj: unknown): string {
   return JSON.stringify(obj);
+}
+
+/** Writes an event the way the CLI does: `type`, `data`, `id`, `timestamp`, then `parentId`. */
+function cliLine(type: string, timestamp: string, data: unknown = {}, parentId: string | null = null): string {
+  return JSON.stringify({ type, data, id: "0b9e1f7a-4c1d-4f3e-9a51-6d2c8e7b5a10", timestamp, parentId });
 }
 
 const LOG = [
@@ -521,5 +529,105 @@ describe("model usage", () => {
       ].join("\n"),
     );
     expect(parsed).toMatchObject({ linesAdded: 25, linesRemoved: 4 });
+  });
+});
+
+describe("events the indexer has no use for", () => {
+  const parentId = "8c5e0d1e-1f0a-4b9a-9d1e-0a8f3c2b7e61";
+
+  it("still count toward the time range, while other events are read in full", () => {
+    const parsed = parseEventsText(
+      [
+        cliLine("hook.start", "2026-05-08T13:00:00.000Z", { input: { toolName: "bash" } }),
+        cliLine("session.start", "2026-05-08T13:04:00.000Z", { selectedModel: "claude-opus-5" }, parentId),
+        cliLine("user.message", "2026-05-08T13:05:00.000Z", { content: "Run the tests" }, parentId),
+        cliLine("hook.end", "2026-05-08T13:30:00.000Z", { success: true }, parentId),
+      ].join("\n"),
+    );
+    expect(parsed).toMatchObject({
+      startedAt: "2026-05-08T13:00:00.000Z",
+      endedAt: "2026-05-08T13:30:00.000Z",
+      models: ["claude-opus-5"],
+      messages: [{ role: "user", content: "Run the tests" }],
+      malformedLines: 0,
+    });
+  });
+
+  it("are not parsed, since only their timestamp is needed", () => {
+    const parsed = parseEventsText(
+      [
+        start("2026-05-08T13:04:00.000Z"),
+        '{"type":"hook.end","data":{"output":<not parsed>},"id":"e1","timestamp":"2026-05-08T13:30:00.000Z","parentId":null}',
+      ].join("\n"),
+    );
+    expect(parsed).toMatchObject({ endedAt: "2026-05-08T13:30:00.000Z", malformedLines: 0 });
+  });
+
+  it("count toward the time range when their keys come in another order", () => {
+    const parsed = parseEventsText(
+      [
+        line({ type: "hook.start", timestamp: "2026-05-08T13:00:00.000Z", data: {} }),
+        start("2026-05-08T13:04:00.000Z"),
+        line({ timestamp: "2026-05-08T13:30:00.000Z", type: "hook.end", data: {}, parentId }),
+      ].join("\n"),
+    );
+    expect(parsed).toMatchObject({ startedAt: "2026-05-08T13:00:00.000Z", endedAt: "2026-05-08T13:30:00.000Z" });
+  });
+
+  it("count as malformed when truncated, even when the next event was appended to them", () => {
+    const appended = cliLine("session.resume", "2026-05-08T14:00:00.000Z", {}, parentId);
+    const parsed = parseEventsText(
+      [
+        start("2026-05-08T13:04:00.000Z"),
+        `{"type":"hook.start","data":{"input":{"toolName":"ba${appended}`,
+        '{"type":"hook.end","data":{"succ',
+      ].join("\n"),
+    );
+    expect(parsed).toMatchObject({ malformedLines: 2, endedAt: "2026-05-08T13:04:00.000Z" });
+  });
+});
+
+describe("line endings", () => {
+  it("reads CRLF line endings like LF", () => {
+    const log = [
+      cliLine("hook.start", "2026-05-08T13:00:00.000Z"),
+      start("2026-05-08T13:04:00.000Z"),
+      line({ type: "user.message", timestamp: "2026-05-08T13:05:00.000Z", data: { content: "first\nsecond" } }),
+      cliLine("hook.end", "2026-05-08T13:30:00.000Z"),
+      "",
+    ].join("\n");
+    const parsed = parseEventsText(log.replaceAll("\n", "\r\n"));
+    expect(parsed).toEqual(parseEventsText(log));
+    expect(parsed).toMatchObject({ endedAt: "2026-05-08T13:30:00.000Z", malformedLines: 0 });
+  });
+});
+
+describe("parseEventsFile", () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-events-test-"));
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reads the same events whatever the size of the chunks it reads", async () => {
+    const log = [
+      LOG,
+      cliLine("hook.end", "2026-05-08T13:30:00.000Z", { output: "x".repeat(5000) }),
+      line({ type: "user.message", timestamp: "2026-05-08T13:31:00.000Z", data: { content: "長い入力".repeat(2000) } }),
+      '{"type":"hook.start","data":{"inp',
+    ].join("\n");
+    const file = path.join(dir, "events.jsonl");
+    fs.writeFileSync(file, log);
+
+    const expected = parseEventsText(log);
+    expect(expected).toMatchObject({ endedAt: "2026-05-08T13:31:00.000Z", malformedLines: 2 });
+    expect(expected.messages.at(-1)?.content).toBe("長い入力".repeat(2000));
+    for (const chunkSize of [1, 5, 64, 4096, undefined]) {
+      expect(await parseEventsFile(file, chunkSize)).toEqual(expected);
+    }
   });
 });
