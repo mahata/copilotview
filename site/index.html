@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>copilotview - Find your past Copilot conversations</title>
+    <meta name="description" content="Search, browse, and understand your past GitHub Copilot CLI sessions. A free, open-source tool that keeps your conversation history on your machine.">
+    <link rel="canonical" href="https://mahata.github.io/copilotview/">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c0e14" media="(prefers-color-scheme: dark)">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="copilotview">
+    <meta property="og:title" content="copilotview - Find your past Copilot conversations">
+    <meta property="og:description" content="A local, read-only window into your GitHub Copilot CLI history. Search conversations, revisit sessions, and see your recorded usage.">
+    <meta property="og:url" content="https://mahata.github.io/copilotview/">
+    <meta name="twitter:card" content="summary">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="masthead shell">
+      <span class="wordmark">
+        <img src="favicon.svg" alt="" width="28" height="28">
+        copilotview
+      </span>
+      <a href="https://github.com/mahata/copilotview">GitHub</a>
+    </header>
+
+    <main id="main">
+      <section class="hero shell" aria-labelledby="intro">
+        <div class="hero-copy">
+          <h1 id="intro">Find that<br>conversation.</h1>
+          <p class="lede">Search, browse, and make sense of your past GitHub Copilot CLI sessions. All on your own machine.</p>
+          <div class="actions">
+            <a class="button" href="#install">Get started <span aria-hidden="true">&darr;</span></a>
+            <a class="plain" href="https://github.com/mahata/copilotview">Read the source</a>
+          </div>
+          <ul class="requirements" aria-label="At a glance">
+            <li>Runs locally</li>
+            <li>No LLM calls</li>
+            <li>MIT licensed</li>
+          </ul>
+        </div>
+
+        <figure class="preview">
+          <div class="app-preview" role="img" aria-label="Illustrative search results for retry. Two matching conversations show highlighted text and repository labels in copilotview's local web interface.">
+            <div aria-hidden="true">
+              <div class="preview-header">
+                <span class="preview-brand">copilotview</span>
+                <span class="preview-tabs"><span class="preview-tab-current">Sessions</span><span>Statistics</span></span>
+              </div>
+              <div class="preview-body">
+                <div class="preview-search">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.25"/><path d="m12.5 12.5 4 4"/></svg>
+                  <span>retry</span>
+                </div>
+                <div class="preview-filters"><span>All content</span><span>All repositories</span><span>All time</span></div>
+                <p class="preview-count">2 matches</p>
+                <div class="preview-result">
+                  <p class="preview-title">Handle intermittent API failures</p>
+                  <div class="preview-meta"><span class="preview-role">Copilot</span><span>example/api</span><span>Oct 12</span></div>
+                  <p class="preview-snippet">The client will <mark>retry</mark> the request with exponential backoff, up to three attempts.</p>
+                </div>
+                <div class="preview-result">
+                  <p class="preview-title">Make the background worker resilient</p>
+                  <div class="preview-meta"><span class="preview-role preview-role-user">Me</span><span>example/worker</span><span>Oct 10</span></div>
+                  <p class="preview-snippet">Keep the failed job in the queue so we can <mark>retry</mark> it without losing the original payload.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption>Illustrative example &mdash; find the conversation, not just the file.</figcaption>
+        </figure>
+      </section>
+
+      <section class="features shell" aria-labelledby="features-title">
+        <h2 class="visually-hidden" id="features-title">A clearer view of your Copilot history</h2>
+        <article>
+          <h3>Find the useful part</h3>
+          <p>Search your messages, Copilot responses, plans, summaries, and file names across sessions. Narrow the results by repository, model, or period.</p>
+        </article>
+        <article>
+          <h3>See how you got there</h3>
+          <p>Open a session to revisit its conversation, tool calls, files touched, and plans. The context behind a change stays within reach.</p>
+        </article>
+        <article>
+          <h3>Understand your usage</h3>
+          <p>Explore the AI credits, tokens, and code changes the CLI recorded. See trends by repository and model, alongside tool counts and median durations.</p>
+        </article>
+      </section>
+
+      <section class="install section-grid shell" aria-labelledby="install">
+        <div>
+          <h2 id="install">Two commands.<br>A window into your work.</h2>
+          <p class="section-intro">Start with the sessions already on your machine.</p>
+        </div>
+        <div>
+          <ol class="steps">
+            <li>
+              <h3>Install with Homebrew</h3>
+              <pre><code>brew install mahata/tap/copilotview</code></pre>
+              <p>Requires <a href="https://brew.sh/">Homebrew</a> and a GitHub Copilot CLI session history. Homebrew installs Node.js for you.</p>
+            </li>
+            <li>
+              <h3>Start the local viewer</h3>
+              <pre><code>copilotview serve</code></pre>
+              <p>This builds the search index and starts the web UI. Open <a href="http://127.0.0.1:4178">http://127.0.0.1:4178</a> in your browser. The shorter <code>cv serve</code> works too.</p>
+            </li>
+          </ol>
+          <p class="install-note">Prefer to build from source or use a different session directory? See the <a href="https://github.com/mahata/copilotview#readme">README for setup and options</a>.</p>
+        </div>
+      </section>
+
+      <section class="privacy section-grid shell" aria-labelledby="privacy">
+        <div>
+          <h2 id="privacy">Your history stays yours.</h2>
+        </div>
+        <div class="privacy-copy">
+          <p>copilotview reads <code>~/.copilot/session-state/</code> without changing the source files and builds a separate search index at <code>~/.copilotview/index.db</code>. Session content is not sent to external services.</p>
+          <p>It does not call an LLM to generate summaries. It brings together the messages, plans, summaries, and usage that your sessions already recorded.</p>
+          <p class="hosting-note">This introduction is hosted on GitHub Pages. The viewer itself runs locally; there is no account to create or conversation history to upload.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="colophon shell">
+      <p>Free and open source under the <a href="https://github.com/mahata/copilotview/blob/main/LICENSE">MIT license</a>.</p>
+      <nav aria-label="Resources">
+        <a href="https://github.com/mahata/copilotview#readme">Documentation</a>
+        <a href="https://github.com/mahata/copilotview/issues">Support</a>
+        <a href="https://github.com/mahata/copilotview">Source</a>
+      </nav>
+    </footer>
+  </body>
+</html>

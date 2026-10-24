@@ -2,6 +2,8 @@
 
 A local tool for searching, browsing, and getting an overview of your past GitHub Copilot CLI sessions stored in `~/.copilot/session-state/`.
 
+[Visit the website](https://mahata.github.io/copilotview/) for an introduction and installation guide.
+
 It treats the source data as read-only and builds a search index at `~/.copilotview/index.db`. Nothing is sent to external services.
 
 ## Features
@@ -101,6 +103,18 @@ pnpm dev:web   # Vite dev server (proxies API requests to serve on port 4178)
 ```
 
 GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 for every pull request and push to `main`, then runs `scripts/smoke-test.sh` to check that the built CLI's `version`, `index`, `stats`, and `serve` commands work from another directory.
+
+### Website
+
+The public introduction at [mahata.github.io/copilotview](https://mahata.github.io/copilotview/) lives in `site/`. It is plain HTML and CSS, separate from the React application in `web/`, and needs no build. To preview it with Python:
+
+```bash
+python3 -m http.server 8080 --bind 127.0.0.1 --directory site
+```
+
+Open `http://127.0.0.1:8080`. Keep local asset paths relative because the published site lives under `/copilotview/`. The illustration uses sample content, never real session data.
+
+The Pages workflow deploys only `site/` when that directory or `.github/workflows/pages.yml` changes on `main`. It can also be run manually from `main`. Repository Settings > Pages must use **GitHub Actions** as the source. Website-only changes do not alter the application bundle or trigger a new application release.
 
 ## Releasing
 
