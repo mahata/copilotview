@@ -17,7 +17,7 @@ if (!/^[0-9a-f]{64}$/.test(sha256)) {
 // The release tarball's cli.js isn't executable, so the wrapper runs it with Homebrew's node
 // rather than relying on its shebang, which would pick up whichever node comes first on PATH.
 process.stdout.write(`class Copilotview < Formula
-  desc "Browse, search and summarize past GitHub Copilot CLI sessions"
+  desc "Browse, search and summarize past GitHub Copilot CLI and app sessions"
   homepage "https://github.com/mahata/copilotview"
   url "https://github.com/mahata/copilotview/releases/download/v${version}/copilotview-${version}.tar.gz"
   sha256 "${sha256}"

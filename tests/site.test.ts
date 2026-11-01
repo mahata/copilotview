@@ -92,6 +92,14 @@ describe("product website", () => {
     expect(css).not.toMatch(/@import|@font-face|url\s*\(/i);
   });
 
+  it("covers sessions of both the GitHub Copilot CLI and app", () => {
+    const html = readSite("index.html");
+
+    expect(html).toMatch(/<meta name="description" content="[^"]*GitHub Copilot CLI and app sessions[^"]*">/);
+    expect(html).toMatch(/<p class="lede">[^<]*GitHub Copilot CLI and app sessions[^<]*<\/p>/);
+    expect(html).not.toMatch(/GitHub Copilot CLI (?:sessions|history|session history)/);
+  });
+
   it("identifies illustrative data and documents the app's local storage", () => {
     const html = readSite("index.html");
 

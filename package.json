@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Browse, search and summarize past GitHub Copilot CLI sessions stored in ~/.copilot/session-state",
+  "description": "Browse, search and summarize past GitHub Copilot CLI and app sessions stored in ~/.copilot/session-state",
   "license": "MIT",
   "bin": {
     "copilotview": "./dist/cli.js",

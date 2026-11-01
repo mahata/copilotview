@@ -1,6 +1,6 @@
 # copilotview
 
-A local tool for searching, browsing, and getting an overview of your past GitHub Copilot CLI sessions stored in `~/.copilot/session-state/`.
+A local tool for searching, browsing, and getting an overview of your past GitHub Copilot CLI and GitHub Copilot app sessions stored in `~/.copilot/session-state/`. The app runs the Copilot CLI for each of its sessions and chats, so they are recorded there in the same format as sessions you start in a terminal.
 
 [Visit the website](https://copilotview.mahata.org/) for an introduction and installation guide.
 
