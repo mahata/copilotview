@@ -4,9 +4,9 @@ import { bucketAxisLabel, bucketIndexAt, describeSpan, niceAxisMax, tickIndexes,
 
 const TOKYO = "Asia/Tokyo";
 
-/** ICU versions differ in which spaces they put around range dashes and before AM or PM. */
+/** ICU versions differ in the spaces around range dashes and before AM or PM, and in how they join a date and a time. */
 function normalizeSpaces(text: string): string {
-  return text.replace(/[\u2009\u202f\u00a0]/g, " ");
+  return text.replace(/[\u2009\u202f\u00a0]/g, " ").replace(/ at /g, ", ");
 }
 
 function bucket(models: TrendBucket["models"]): TrendBucket {
@@ -61,7 +61,7 @@ describe("bucketIndexAt", () => {
 describe("bucketAxisLabel", () => {
   it("names a bucket briefly in the time zone of the buckets", () => {
     const midnight = "2026-10-31T15:00:00.000Z";
-    expect(bucketAxisLabel(midnight, "hour", TOKYO)).toBe("Nov 1, 12 AM");
+    expect(normalizeSpaces(bucketAxisLabel(midnight, "hour", TOKYO))).toBe("Nov 1, 12 AM");
     expect(bucketAxisLabel(midnight, "day", TOKYO)).toBe("Nov 1");
     expect(bucketAxisLabel(midnight, "week", TOKYO)).toBe("Nov 1");
     expect(bucketAxisLabel(midnight, "month", TOKYO)).toBe("Nov 2026");
