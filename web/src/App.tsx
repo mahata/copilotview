@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Facets } from "./api";
 import { Browse } from "./Browse";
 import { Detail } from "./Detail";
 import { CUSTOM_PERIOD, PERIODS } from "./period";
 import { StatsView } from "./Stats";
+import { TrendsView, type IntervalChoice } from "./Trends";
 
-type Route = { view: "browse" } | { view: "stats" } | { view: "session"; id: string };
+type Route = { view: "browse" } | { view: "stats" } | { view: "trends" } | { view: "session"; id: string };
 
 function parseHash(): Route {
   const hash = window.location.hash.replace(/^#\/?/, "");
   if (hash.startsWith("session/")) return { view: "session", id: hash.slice("session/".length) };
   if (hash === "stats") return { view: "stats" };
+  if (hash === "trends") return { view: "trends" };
   return { view: "browse" };
 }
 
@@ -44,6 +46,19 @@ export function App() {
   const [route, setRoute] = useState<Route>(parseHash);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [facets, setFacets] = useState<Facets | null>(null);
+  const [trendInterval, setTrendInterval] = useState<IntervalChoice>("auto");
+  const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    // Panels that stick below the header need its height, which changes as the search row wraps.
+    const observer = new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--header-height", `${header.offsetHeight}px`);
+    });
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseHash());
@@ -71,17 +86,20 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      <header className="header" ref={headerRef}>
         <div className="header__top">
           <button className="brand" onClick={() => go("/")}>
             copilotview
           </button>
           <nav className="nav">
-            <button aria-current={route.view !== "stats"} onClick={() => go("/")}>
+            <button aria-current={route.view === "browse" || route.view === "session"} onClick={() => go("/")}>
               Sessions
             </button>
             <button aria-current={route.view === "stats"} onClick={() => go("/stats")}>
               Statistics
+            </button>
+            <button aria-current={route.view === "trends"} onClick={() => go("/trends")}>
+              Trends
             </button>
           </nav>
         </div>
@@ -168,6 +186,14 @@ export function App() {
 
       {route.view === "stats" ? (
         <StatsView period={filters.period} periodFrom={filters.periodFrom} periodTo={filters.periodTo} />
+      ) : route.view === "trends" ? (
+        <TrendsView
+          period={filters.period}
+          periodFrom={filters.periodFrom}
+          periodTo={filters.periodTo}
+          interval={trendInterval}
+          onIntervalChange={setTrendInterval}
+        />
       ) : route.view === "session" ? (
         <Detail id={route.id} onBack={() => go("/")} />
       ) : (

@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Database } from "../db/sqlite";
+import { TREND_INTERVALS, type TrendInterval } from "../db/buckets";
 import { getFacets, getSession, getStats, getTimeline, listSessions, search } from "../db/query";
 import type { ListOptions, SearchScope } from "../db/query";
+import { getTrends } from "../db/trends";
 
 function num(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -28,6 +30,10 @@ function listOptionsFrom(url: URL): ListOptions {
   };
 }
 
+function trendIntervalFrom(value: string | null): TrendInterval | "auto" {
+  return TREND_INTERVALS.find((interval) => interval === value) ?? "auto";
+}
+
 /** Locates the built SPA next to the bundled CLI, or in the repo during dev. */
 function resolveWebRoot(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +51,19 @@ export function createApp(db: Database): Hono {
   app.get("/api/stats", (c) => {
     const { from, to } = listOptionsFrom(new URL(c.req.url));
     return c.json(getStats(db, { from, to }));
+  });
+
+  app.get("/api/trends", (c) => {
+    const url = new URL(c.req.url);
+    const { from, to } = listOptionsFrom(url);
+    return c.json(
+      getTrends(db, {
+        from,
+        to,
+        interval: trendIntervalFrom(url.searchParams.get("interval")),
+        timeZone: url.searchParams.get("tz") ?? undefined,
+      }),
+    );
   });
 
   app.get("/api/sessions", (c) => {

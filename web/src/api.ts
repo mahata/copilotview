@@ -123,6 +123,41 @@ export interface Facets {
   models: string[];
 }
 
+export type TrendInterval = "hour" | "day" | "week" | "month";
+
+export interface TrendCounts {
+  /** Sessions with a prompt, response, tool call, or model call in the bucket. */
+  sessions: number;
+  userMessages: number;
+  assistantMessages: number;
+  requests: number;
+  /** Null when there is usage but none of it recorded AI credits. */
+  aiCredits: number | null;
+  requestsWithoutAiCredits: number;
+}
+
+export interface ModelTrend {
+  model: string;
+  requests: number;
+  aiCredits: number | null;
+  requestsWithoutAiCredits: number;
+}
+
+export interface TrendBucket extends TrendCounts {
+  start: string;
+  end: string;
+  /** Ordered by AI credits, then requests. */
+  models: ModelTrend[];
+}
+
+export interface Trends {
+  interval: TrendInterval;
+  timeZone: string;
+  buckets: TrendBucket[];
+  /** Counts each session once, however many buckets it was active in. */
+  totals: TrendCounts;
+}
+
 async function get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
   const url = new URL(path, window.location.origin);
   for (const [key, value] of Object.entries(params)) {
@@ -136,6 +171,7 @@ async function get<T>(path: string, params: Record<string, string | number | und
 export const api = {
   facets: () => get<Facets>("/api/facets"),
   stats: (params: Record<string, string | number | undefined>) => get<Stats>("/api/stats", params),
+  trends: (params: Record<string, string | number | undefined>) => get<Trends>("/api/trends", params),
   sessions: (params: Record<string, string | number | undefined>) =>
     get<{ total: number; sessions: SessionSummary[] }>("/api/sessions", params),
   search: (params: Record<string, string | number | undefined>) => get<SearchResult>("/api/search", params),
