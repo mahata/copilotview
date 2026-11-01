@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type Database } from "./sqlite";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /**
  * `trigram` is the only built-in tokenizer that indexes Japanese text, since
@@ -118,6 +118,23 @@ CREATE TABLE IF NOT EXISTS model_usage (
 
 CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage(session_id);
 
+-- Totals of each session's activity per UTC quarter hour, so trends don't read
+-- every message and model call. Rows with model '' hold messages and tool calls.
+CREATE TABLE IF NOT EXISTS activity_slots (
+  slot_start INTEGER NOT NULL,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  user_messages INTEGER NOT NULL DEFAULT 0,
+  assistant_messages INTEGER NOT NULL DEFAULT 0,
+  tool_calls INTEGER NOT NULL DEFAULT 0,
+  requests INTEGER NOT NULL DEFAULT 0,
+  ai_credits REAL,
+  requests_without_ai_credits INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (slot_start, session_id, model)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_activity_slots_session ON activity_slots(session_id);
+
 CREATE TABLE IF NOT EXISTS artifacts (
   id INTEGER PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -187,6 +204,7 @@ export function migrate(db: Database): void {
       "artifacts_fts",
       "session_files",
       "artifacts",
+      "activity_slots",
       "model_usage",
       "tool_calls",
       "messages",

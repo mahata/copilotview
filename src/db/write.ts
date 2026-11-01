@@ -1,5 +1,6 @@
 import type { Database, Statement } from "./sqlite";
 import type { ParsedEvents, ParsedArtifact, SessionWorkspace } from "../types";
+import { rollUpActivity } from "./activity";
 
 export interface SessionInput {
   id: string;
@@ -30,6 +31,7 @@ export function createWriter(db: Database): IndexWriter {
     deleteMessages: db.prepare("DELETE FROM messages WHERE session_id = ?"),
     deleteTools: db.prepare("DELETE FROM tool_calls WHERE session_id = ?"),
     deleteUsage: db.prepare("DELETE FROM model_usage WHERE session_id = ?"),
+    deleteActivity: db.prepare("DELETE FROM activity_slots WHERE session_id = ?"),
     deleteArtifacts: db.prepare("DELETE FROM artifacts WHERE session_id = ?"),
     deleteFiles: db.prepare("DELETE FROM session_files WHERE session_id = ?"),
     insertSession: db.prepare(`
@@ -61,6 +63,12 @@ export function createWriter(db: Database): IndexWriter {
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
+    insertActivity: db.prepare(`
+      INSERT INTO activity_slots (
+        slot_start, session_id, model, user_messages, assistant_messages, tool_calls,
+        requests, ai_credits, requests_without_ai_credits
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
     insertArtifact: db.prepare(`
       INSERT INTO artifacts (session_id, kind, ordinal, title, body) VALUES (?, ?, ?, ?, ?)
     `),
@@ -74,6 +82,7 @@ export function createWriter(db: Database): IndexWriter {
     stmts.deleteMessages.run(sessionId);
     stmts.deleteTools.run(sessionId);
     stmts.deleteUsage.run(sessionId);
+    stmts.deleteActivity.run(sessionId);
     stmts.deleteArtifacts.run(sessionId);
     stmts.deleteFiles.run(sessionId);
     stmts.deleteSession.run(sessionId);
@@ -97,6 +106,7 @@ export function createWriter(db: Database): IndexWriter {
       const userCount = events.messages.filter((m) => m.role === "user" && m.source === null).length;
       const assistantCount = events.messages.filter((m) => m.role === "assistant").length;
       const uniqueFiles = new Set(events.files.map((f) => f.path));
+      const updatedAt = workspace?.updatedAt ?? events.endedAt ?? null;
 
       stmts.insertSession.run(
         id,
@@ -112,7 +122,7 @@ export function createWriter(db: Database): IndexWriter {
         events.copilotVersion,
         JSON.stringify(events.models),
         workspace?.createdAt ?? events.startedAt ?? null,
-        workspace?.updatedAt ?? events.endedAt ?? null,
+        updatedAt,
         events.startedAt,
         events.endedAt,
         durationMs(events.startedAt, events.endedAt),
@@ -158,6 +168,19 @@ export function createWriter(db: Database): IndexWriter {
           u.outputTokens,
           u.cacheReadTokens,
           u.cacheWriteTokens,
+        );
+      }
+      for (const slot of rollUpActivity(events, updatedAt)) {
+        stmts.insertActivity.run(
+          slot.slotStart,
+          id,
+          slot.model,
+          slot.userMessages,
+          slot.assistantMessages,
+          slot.toolCalls,
+          slot.requests,
+          slot.aiCredits,
+          slot.requestsWithoutAiCredits,
         );
       }
       for (const a of artifacts) {

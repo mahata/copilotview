@@ -668,10 +668,12 @@ describe("schema migration", () => {
       const columns = (db.prepare("SELECT name FROM pragma_table_info('tool_calls')").all() as { name: string }[]).map(
         (c) => c.name,
       );
-      const usageTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'model_usage'").get();
+      const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(
+        (t) => t.name,
+      );
       db.close();
       expect(columns).toContain("duration_ms");
-      expect(usageTable).toBeDefined();
+      expect(tables).toEqual(expect.arrayContaining(["model_usage", "activity_slots"]));
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
