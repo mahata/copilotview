@@ -11,6 +11,7 @@ It treats the source data as read-only and builds a search index at `~/.copilotv
 - **Full-text search** — Search across all sessions, optionally scoped to your messages, Copilot responses, plans and summaries, or file names. Filter by repository, model, and period: a preset from the past 24 hours to the past year, or a custom range of dates.
 - **Session browsing** — View the conversation timeline, tool call log, files touched, plans, completion reports, and the session's AI credits, tokens, and lines changed.
 - **Statistics** — See sessions by month; usage trends by repository, model, and tool; AI credits and tokens by model; lines added and removed; and median tool durations, across the complete index or the same periods as search.
+- **Trends** — Chart AI credits, active sessions, and messages for the same periods by hour, day, week, or month, and see the AI credits each model used in any bar.
 
 copilotview does not call an LLM to produce summaries. Instead, it gathers and displays information each session already records: the `summary` field in `workspace.yaml`, completion reports, checkpoints, the usage the CLI records, and aggregate counts.
 
@@ -79,6 +80,8 @@ A custom range covers whole days in your browser's time zone, from the start of 
 
 The selected period also applies to the Statistics page. It counts sessions, along with their repositories, models, branches, and source data, by the session's last update, as the session list does, and Sessions by month still groups them by the month they were created. It counts messages by the time they were sent and tool calls by the time they were made. Usage, lines changed, and tool durations follow the rules in [How usage is counted](#how-usage-is-counted).
 
+The Trends page charts the selected period too, as described in [How trends are counted](#how-trends-are-counted).
+
 ## How usage is counted
 
 When it exits, the CLI writes a `session.shutdown` event with the session's model calls, AI credits, tokens, and lines added and removed. Recent versions also write a `session.usage_record` event for each model call. copilotview takes the usage of each CLI run, from starting or resuming a session to exiting, from its usage records if the CLI wrote them, and otherwise from its shutdown event.
@@ -92,6 +95,19 @@ When it exits, the CLI writes a `session.shutdown` event with the session's mode
 - A tool's duration runs from the start of a call to its completion, including any time spent waiting for your approval or answer. The Statistics page therefore shows each tool's median duration, which a few long waits don't skew.
 
 With a period selected, usage counts by when it was recorded: the time of each call, or for usage taken from a shutdown event, the time the run ended. The number of sessions with usage recorded without AI credits counts the same way. Lines changed and the number of sessions with unrecorded usage count by the session's last update, as other session statistics do. Tool durations count by when the call was made.
+
+## How trends are counted
+
+The Trends page charts AI credits, active sessions, and messages over the selected period, up to now. With All time selected, it starts at the first activity in the index. Each bar covers a whole hour, day, week starting on Monday, or month in your browser's time zone, so the first and last bars can include activity from just before or after the period. Days, weeks, and months follow your clock when daylight saving time starts or ends, while every hour lasts an hour.
+
+Auto picks the finest interval that charts the period in about 100 bars or fewer: hours for up to four days, days for up to about three months, weeks for up to almost two years, and months for anything longer. If you pick an interval that would need more than 400 bars, the page uses the next coarser one and says so.
+
+- A session is active in a bar if it has a message from you, a Copilot response, a tool call, or a model call in it. The totals count each session once, however many bars it's active in.
+- Messages are your messages and Copilot's responses, counted by when they were sent, as on the Statistics page.
+- AI credits and requests count by when they were recorded, as described in [How usage is counted](#how-usage-is-counted). Point at a bar, or focus the charts and use the arrow keys, to see its AI credits by model.
+- Messages, tool calls, and usage without a recorded time count at the session's last update.
+
+When the bars line up with the period, as days do with a custom range, the totals of messages, requests, and AI credits match the Statistics page.
 
 ## Development
 
@@ -138,6 +154,7 @@ gh workflow run homebrew-tap.yml -f tag=v1.2.3
 ## Design notes
 
 - The index stores only message text, plans, summaries, file paths, and usage counts; **tool output is not stored**. As a result, 1.2 GB of source data fits in roughly 30 MB.
+- The index also totals each session's activity by quarter hour, so the Trends page reads one small table instead of every message and model call. On an index of 22,700 sessions, a year of daily bars takes about 50 ms. Every UTC offset in use is a whole number of quarter hours, so these totals add up exactly to the hours, days, weeks, and months of any time zone.
 - When the schema changes, the index is discarded and rebuilt. This is safe because the source data is always left in place.
 - When copilotview indexes every session — on the first run, after a schema change, or with `--force` — it builds the full-text index in one pass after writing the sessions, which takes about half as long as updating it session by session. Such a run is a single transaction: if it's interrupted, the index stays as it was, and the next run starts over.
 - copilotview does not read `~/.copilot/session-store.db`, because its schema is internal to Copilot and not public.

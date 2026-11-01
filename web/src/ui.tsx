@@ -51,8 +51,12 @@ export function formatCount(count: number, singular: string, plural = `${singula
 
 const compactNumber = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
+export function formatCompact(value: number): string {
+  return compactNumber.format(value);
+}
+
 export function formatTokens(count: number): string {
-  return compactNumber.format(count);
+  return formatCompact(count);
 }
 
 /** AI credits are fractional, since models are priced per token. */

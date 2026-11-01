@@ -39,6 +39,10 @@ node "$cli_path" serve --source "$work_dir/session-state" --index "$work_dir/ind
 server_pid=$!
 curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "$base_url/api/stats"
 echo
+trends="$(curl -fsS "$base_url/api/trends")"
+echo "$trends"
+# Unknown paths fall back to index.html, so check for the trends of the empty index.
+grep -q '"buckets":\[\]' <<<"$trends"
 asset_path="$(curl -fsS "$base_url/" | grep -o -m1 '/assets/[^"]*\.js')"
 # Unknown paths fall back to index.html, so a 200 alone doesn't prove static serving works.
 curl -fsS -o /dev/null -w '%{content_type}\n' "$base_url$asset_path" | grep javascript
