@@ -29,4 +29,11 @@ describe("copilotview CLI", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("cv is a shorter alias for copilotview");
   });
+
+  it("says in its help that it covers sessions of both the GitHub Copilot CLI and app", () => {
+    const result = runCli("--help");
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("GitHub Copilot CLI and app sessions");
+  });
 });
