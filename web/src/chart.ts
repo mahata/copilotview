@@ -10,6 +10,13 @@ export function niceAxisMax(value: number): number {
   return Number((step * powerOfTen).toPrecision(12));
 }
 
+const axisMaxNumber = new Intl.NumberFormat("en-US", { notation: "compact", maximumSignificantDigits: 2 });
+
+/** Labels a `niceAxisMax` value, which has at most two significant digits, exactly. */
+export function formatAxisMax(value: number): string {
+  return axisMaxNumber.format(value);
+}
+
 /** Indexes of evenly spaced buckets to label, starting with the first. */
 export function tickIndexes(count: number, maxTicks: number): number[] {
   const step = Math.max(1, Math.ceil(count / maxTicks));
@@ -39,14 +46,26 @@ export function bucketAxisLabel(start: string, interval: TrendInterval, timeZone
 export function describeSpan(start: string, end: string, interval: TrendInterval, timeZone: string): string {
   const startDate = new Date(start);
   if (interval === "hour") {
-    return new Intl.DateTimeFormat("en-US", {
+    const endDate = new Date(end);
+    const dateAndTime: Intl.DateTimeFormatOptions = {
       timeZone,
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    }).formatRange(startDate, new Date(end));
+    };
+    const hours = new Intl.DateTimeFormat("en-US", dateAndTime);
+    if (hours.format(startDate) !== hours.format(endDate)) return hours.formatRange(startDate, endDate);
+    // When clocks fall back, an hour starts and ends at the same time on the clock, and only the time zone tells them apart.
+    const startWithZone = new Intl.DateTimeFormat("en-US", { ...dateAndTime, timeZoneName: "short" }).format(startDate);
+    const endWithZone = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(endDate);
+    return `${startWithZone} – ${endWithZone}`;
   }
 
   // Buckets end where the next begins, so the last day they cover is the one before.

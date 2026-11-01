@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrendBucket } from "../web/src/api";
-import { bucketAxisLabel, bucketIndexAt, describeSpan, niceAxisMax, tickIndexes, totalByModel } from "../web/src/chart";
+import { bucketAxisLabel, bucketIndexAt, describeSpan, formatAxisMax, niceAxisMax, tickIndexes, totalByModel } from "../web/src/chart";
 
 const TOKYO = "Asia/Tokyo";
 
@@ -30,6 +30,20 @@ describe("niceAxisMax", () => {
 
   it("gives charts without values an axis up to 1", () => {
     expect(niceAxisMax(0)).toBe(1);
+  });
+});
+
+describe("formatAxisMax", () => {
+  it("labels the top of an axis exactly, however small, and abbreviates large values", () => {
+    expect([0.02, 0.05, 0.25, 2.5, 250, 2500, 10000].map(formatAxisMax)).toEqual([
+      "0.02",
+      "0.05",
+      "0.25",
+      "2.5",
+      "250",
+      "2.5K",
+      "10K",
+    ]);
   });
 });
 
@@ -87,6 +101,12 @@ describe("describeSpan", () => {
     expect(normalizeSpaces(describeSpan("2026-09-30T15:00:00.000Z", "2026-11-30T15:00:00.000Z", "month", TOKYO))).toBe(
       "October – November 2026",
     );
+  });
+
+  it("names both ends of an hour that starts and ends at the same time on the clock because clocks fell back", () => {
+    expect(
+      normalizeSpaces(describeSpan("2026-11-01T05:00:00.000Z", "2026-11-01T06:00:00.000Z", "hour", "America/New_York")),
+    ).toBe("Nov 1, 2026, 1:00 AM EDT – 1:00 AM EST");
   });
 });
 

@@ -1,8 +1,16 @@
 import { memo, useEffect, useMemo, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { api, type TrendBucket, type TrendInterval, type Trends } from "./api";
-import { bucketAxisLabel, bucketIndexAt, describeSpan, niceAxisMax, tickIndexes, totalByModel } from "./chart";
+import {
+  bucketAxisLabel,
+  bucketIndexAt,
+  describeSpan,
+  formatAxisMax,
+  niceAxisMax,
+  tickIndexes,
+  totalByModel,
+} from "./chart";
 import { describePeriod, periodRange, type PeriodSelection } from "./period";
-import { formatAiCredits, formatCompact, formatCount } from "./ui";
+import { formatAiCredits, formatCount } from "./ui";
 
 export type IntervalChoice = TrendInterval | "auto";
 
@@ -100,7 +108,7 @@ function TrendChart({
       <h2 className="chart__title">{title}</h2>
       <div className="chart__area">
         <span className="chart__max" aria-hidden="true">
-          {formatCompact(axisMax)}
+          {formatAxisMax(axisMax)}
         </span>
         <svg
           className="chart__plot"

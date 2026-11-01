@@ -63,14 +63,20 @@ const COUNT_SUMS = `
   COALESCE(SUM(a.assistant_messages), 0) AS assistant_messages,
   COALESCE(SUM(a.requests), 0) AS requests,
   SUM(a.ai_credits) AS ai_credits,
-  COALESCE(SUM(a.requests_without_ai_credits), 0) AS requests_without_ai_credits
+  COALESCE(SUM(a.requests_without_ai_credits), 0) AS requests_without_ai_credits,
+  COALESCE(SUM(a.model <> '${NO_MODEL}'), 0) AS usage_rows
 `;
 
 const IN_BUCKET = "a.slot_start >= bucket.value ->> 0 AND a.slot_start < bucket.value ->> 1";
 
+/**
+ * As on the Statistics page, null only when there is usage and none of it
+ * recorded AI credits. Usage can lack requests, e.g. a shutdown event that
+ * reports only tokens, so its rows count rather than its requests.
+ */
 function aiCreditsOf(row: Row): number | null {
   if (row.ai_credits !== null && row.ai_credits !== undefined) return Number(row.ai_credits);
-  return Number(row.requests_without_ai_credits ?? 0) > 0 ? null : 0;
+  return Number(row.usage_rows ?? 0) > 0 ? null : 0;
 }
 
 function toCounts(row: Row): TrendCounts {
@@ -107,7 +113,8 @@ interface ChartRange {
 
 /**
  * Charts the period up to now, from the first activity when it has no start.
- * A period too long to chart even by month starts at the first activity too.
+ * A period too long to chart even by month starts at the first activity too,
+ * and without any activity has nothing to chart.
  */
 function chartRange(db: Database, options: TrendOptions, requested: TrendInterval | "auto"): ChartRange | null {
   const row = db.prepare("SELECT MIN(slot_start) AS first FROM activity_slots").get() as Row;
@@ -118,9 +125,12 @@ function chartRange(db: Database, options: TrendOptions, requested: TrendInterva
   if (first === undefined) return null;
 
   let interval = chooseInterval(first, last, requested);
-  if (!fitsInChart(first, last, interval) && firstActivity !== undefined && firstActivity > first) {
-    first = firstActivity;
-    interval = chooseInterval(first, last, requested);
+  if (!fitsInChart(first, last, interval)) {
+    if (firstActivity === undefined) return null;
+    if (firstActivity > first) {
+      first = firstActivity;
+      interval = chooseInterval(first, last, requested);
+    }
   }
   return first <= last ? { first, last, interval } : null;
 }
@@ -157,7 +167,7 @@ export function getTrends(db: Database, options: TrendOptions = {}): Trends {
   const modelRows = db
     .prepare(
       `SELECT bucket.key AS bucket, a.model AS model, SUM(a.requests) AS requests, SUM(a.ai_credits) AS ai_credits,
-         SUM(a.requests_without_ai_credits) AS requests_without_ai_credits
+         SUM(a.requests_without_ai_credits) AS requests_without_ai_credits, COUNT(*) AS usage_rows
        FROM json_each(?) AS bucket JOIN activity_slots a ON ${IN_BUCKET}
        WHERE a.model <> ?
        GROUP BY bucket.key, a.model

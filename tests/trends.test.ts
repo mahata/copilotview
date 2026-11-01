@@ -257,13 +257,63 @@ describe("trends", () => {
   });
 });
 
+describe("trends of usage recorded without requests or AI credits", () => {
+  let root: string;
+  let db: Database;
+  const october5 = { from: "2026-10-05T00:00:00.000Z", to: "2026-10-05T23:59:59.999Z" };
+
+  beforeAll(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-trends-tokens-test-"));
+    const dir = path.join(root, "tokens");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "workspace.yaml"), "id: tokens\nupdated_at: 2026-10-05T01:00:00.000Z\n");
+    fs.writeFileSync(
+      path.join(dir, "events.jsonl"),
+      jsonl(
+        { type: "session.start", timestamp: "2026-10-05T00:00:00.000Z", data: { sessionId: "tokens" } },
+        {
+          type: "session.shutdown",
+          timestamp: "2026-10-05T01:00:00.000Z",
+          data: { modelMetrics: { "gpt-5": { requests: { count: 0 }, usage: { inputTokens: 40 } } } },
+        },
+      ),
+    );
+    db = openIndex(":memory:");
+    await indexSessions(db, root);
+  });
+
+  afterAll(() => {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("leaves AI credits unrecorded, as the statistics do", () => {
+    const trends = getTrends(db, { ...october5, interval: "day", timeZone: "UTC", now: afterOctober });
+
+    expect(getStats(db, october5).usage.aiCredits).toBeNull();
+    expect(trends.totals.aiCredits).toBeNull();
+    expect(trends.buckets).toMatchObject([
+      { aiCredits: null, models: [{ model: "gpt-5", requests: 0, aiCredits: null, requestsWithoutAiCredits: 0 }] },
+    ]);
+  });
+});
+
 describe("trends of an empty index", () => {
+  let db: Database;
+
+  beforeAll(() => {
+    db = openIndex(":memory:");
+  });
+
+  afterAll(() => {
+    db.close();
+  });
+
   it("returns no buckets", () => {
-    const db = openIndex(":memory:");
-    try {
-      expect(getTrends(db, { timeZone: TOKYO })).toMatchObject({ interval: "day", buckets: [] });
-    } finally {
-      db.close();
-    }
+    expect(getTrends(db, { timeZone: TOKYO })).toMatchObject({ interval: "day", buckets: [] });
+  });
+
+  it("returns no buckets for a period too long to chart, rather than thousands of empty ones", () => {
+    expect(getTrends(db, { from: "0001-01-01T00:00:00.000Z", timeZone: TOKYO, now: afterOctober }).buckets).toEqual([]);
   });
 });
