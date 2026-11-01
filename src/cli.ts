@@ -37,7 +37,7 @@ function flagString(flags: ParsedArgs["flags"], key: string): string | undefined
   return typeof value === "string" ? value : undefined;
 }
 
-const HELP = `copilotview — browse and search past Copilot CLI sessions
+const HELP = `copilotview — browse and search past GitHub Copilot CLI and app sessions
 
 Usage:
   copilotview index [options]    Build or refresh the search index
