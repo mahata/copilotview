@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const siteDirectory = path.resolve("site");
-const publicUrl = new URL("https://mahata.github.io/copilotview/");
+const publicUrl = new URL("https://copilotview.mahata.org/");
+const siteRoots = [publicUrl.href, "https://mahata.github.io/copilotview/", "http://127.0.0.1:8080/"];
 const readSite = (file: string) => readFileSync(path.join(siteDirectory, file), "utf8");
 
 interface PagesWorkflow {
@@ -25,7 +26,7 @@ interface PagesWorkflow {
 }
 
 describe("product website", () => {
-  it("provides an English document with canonical metadata for the Pages project URL", () => {
+  it("provides an English document with canonical metadata for the custom domain", () => {
     const html = readSite("index.html");
 
     expect(html).toMatch(/<html lang="en">/);
@@ -51,7 +52,15 @@ describe("product website", () => {
     expect(html).toContain('href="https://github.com/mahata/copilotview/issues"');
   });
 
-  it("resolves every local link, asset, and anchor beneath /copilotview/", () => {
+  it("links the README to the custom domain", () => {
+    const readme = readFileSync("README.md", "utf8");
+
+    expect(readme).toContain(`[Visit the website](${publicUrl.href})`);
+    expect(readme).toContain(`[${publicUrl.hostname}](${publicUrl.href})`);
+  });
+
+  it.each(siteRoots)("resolves every local link, asset, and anchor from %s", (siteRoot) => {
+    const siteRootUrl = new URL(siteRoot);
     const html = readSite("index.html");
     const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
     const references = [...html.matchAll(/\b(?:href|src)="([^"]+)"/g)];
@@ -59,11 +68,11 @@ describe("product website", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(references.length).toBeGreaterThan(0);
     for (const [, reference] of references) {
-      const url = new URL(reference!, publicUrl);
-      if (url.origin !== publicUrl.origin) continue;
+      const url = new URL(reference!, siteRootUrl);
+      if (url.origin !== siteRootUrl.origin) continue;
 
-      expect(url.pathname, reference).toMatch(/^\/copilotview\//);
-      const file = url.pathname.slice(publicUrl.pathname.length) || "index.html";
+      expect(url.pathname.startsWith(siteRootUrl.pathname), reference).toBe(true);
+      const file = url.pathname.slice(siteRootUrl.pathname.length) || "index.html";
       expect(existsSync(path.join(siteDirectory, file)), reference).toBe(true);
       if (url.hash) expect(ids, reference).toContain(url.hash.slice(1));
     }
