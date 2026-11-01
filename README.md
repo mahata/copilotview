@@ -2,7 +2,7 @@
 
 A local tool for searching, browsing, and getting an overview of your past GitHub Copilot CLI sessions stored in `~/.copilot/session-state/`.
 
-[Visit the website](https://mahata.github.io/copilotview/) for an introduction and installation guide.
+[Visit the website](https://copilotview.mahata.org/) for an introduction and installation guide.
 
 It treats the source data as read-only and builds a search index at `~/.copilotview/index.db`. Nothing is sent to external services.
 
@@ -106,15 +106,23 @@ GitHub Actions runs lint, typecheck, tests, and the build on Node.js 24 and 26 f
 
 ### Website
 
-The public introduction at [mahata.github.io/copilotview](https://mahata.github.io/copilotview/) lives in `site/`. It is plain HTML and CSS, separate from the React application in `web/`, and needs no build. To preview it with Python:
+The public introduction at [copilotview.mahata.org](https://copilotview.mahata.org/) lives in `site/`. It is plain HTML and CSS, separate from the React application in `web/`, and needs no build. To preview it with Python:
 
 ```bash
 python3 -m http.server 8080 --bind 127.0.0.1 --directory site
 ```
 
-Open `http://127.0.0.1:8080`. Keep local asset paths relative because the published site lives under `/copilotview/`. The illustration uses sample content, never real session data.
+Open `http://127.0.0.1:8080`. Keep local asset paths relative so the same files work at the domain root, in local previews, and under the `/copilotview/` project path. The illustration uses sample content, never real session data.
 
 The Pages workflow deploys only `site/` when that directory or `.github/workflows/pages.yml` changes on `main`. It can also be run manually from `main`. Repository Settings > Pages must use **GitHub Actions** as the source. Website-only changes do not alter the application bundle or trigger a new application release.
+
+The custom domain `copilotview.mahata.org` is set in repository Settings > Pages, not in a `CNAME` file, which GitHub ignores for Actions deployments. Cloudflare's `mahata.org` zone points it at GitHub Pages with this record:
+
+| Type | Name | Target | Proxy status | TTL |
+| --- | --- | --- | --- | --- |
+| CNAME | `copilotview` | `mahata.github.io` | DNS only | Auto |
+
+Keep the record DNS only: GitHub checks that the name resolves to Pages and issues the HTTPS certificate itself. **Enforce HTTPS** is enabled, and `https://mahata.github.io/copilotview/` redirects to the custom domain. If the custom domain is ever removed from Pages, delete the DNS record too, so that no other Pages site can claim the name.
 
 ## Releasing
 
