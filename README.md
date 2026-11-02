@@ -128,7 +128,7 @@ The public introduction at [copilotview.mahata.org](https://copilotview.mahata.o
 python3 -m http.server 8080 --bind 127.0.0.1 --directory site
 ```
 
-Open `http://127.0.0.1:8080`. Keep local asset paths relative so the same files work at the domain root, in local previews, and under the `/copilotview/` project path. The illustration uses sample content, never real session data.
+Open `http://127.0.0.1:8080`. Keep local asset paths relative so the same files work at the domain root, in local previews, and under the `/copilotview/` project path. The illustration uses sample content, never real session data. Its tabs switch between sample Sessions, Statistics, and Trends screens with radio buttons and CSS, so the page needs no JavaScript.
 
 The Pages workflow deploys only `site/` when that directory or `.github/workflows/pages.yml` changes on `main`. It can also be run manually from `main`. Repository Settings > Pages must use **GitHub Actions** as the source. Website-only changes do not alter the application bundle or trigger a new application release.
 
