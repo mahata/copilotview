@@ -84,12 +84,36 @@ describe("product website", () => {
   it("needs no scripts, forms, external styles, or fonts", () => {
     const html = readSite("index.html");
     const css = readSite("styles.css");
+    const inputs = [...html.matchAll(/<input\b[^>]*>/gi)].map(([input]) => input);
 
-    expect(html).not.toMatch(/<(?:script|iframe|form|input|button)\b/i);
-    expect(html).not.toMatch(/\bon(?:click|load|error)\s*=/i);
+    expect(html).not.toMatch(/<(?:script|iframe|form|button|select|textarea)\b/i);
+    expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+    for (const input of inputs) {
+      expect(input).toMatch(/\btype="radio"/);
+      expect(input).toMatch(/\bname="preview-view"/);
+    }
     expect(html).not.toMatch(/<img\b[^>]*src="(?:https?:)?\/\//i);
     expect(html).not.toMatch(/<link\b[^>]*rel="(?:stylesheet|preload|preconnect|dns-prefetch|icon)"[^>]*href="(?:https?:)?\/\//i);
     expect(css).not.toMatch(/@import|@font-face|url\s*\(/i);
+  });
+
+  it("switches the illustration between the app's Sessions, Statistics, and Trends tabs", () => {
+    const html = readSite("index.html");
+    const css = readSite("styles.css");
+    const views = ["sessions", "statistics", "trends"];
+    const tabs = [...html.matchAll(/<label class="preview-tab"><input ([^>]+)>([^<]+)<\/label>/g)];
+
+    expect(html).toMatch(/<div class="preview-tabs" role="radiogroup" aria-label="[^"]+">/);
+    expect(tabs.map(([, , label]) => label)).toEqual(["Sessions", "Statistics", "Trends"]);
+    expect(tabs.map(([, attributes]) => /\bvalue="([^"]+)"/.exec(attributes!)?.[1])).toEqual(views);
+    expect(tabs.map(([, attributes]) => /\bchecked\b/.test(attributes!))).toEqual([true, false, false]);
+    for (const view of views) {
+      expect(html).toMatch(
+        new RegExp(`<div class="preview-view preview-${view}" role="img" aria-label="Illustrative [^"]+">\\s*<div class="preview-body" aria-hidden="true">`),
+      );
+      expect(html).toMatch(new RegExp(`<span class="preview-caption preview-${view}">Illustrative example &mdash; [^<]+</span>`));
+      expect(css).toMatch(new RegExp(`\\.preview:has\\(\\[value="${view}"\\][^{]*\\.preview-${view}\\b`));
+    }
   });
 
   it("covers sessions of both the GitHub Copilot CLI and app", () => {

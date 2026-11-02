@@ -45,33 +45,135 @@
         </div>
 
         <figure class="preview">
-          <div class="app-preview" role="img" aria-label="Illustrative search results for retry. Two matching conversations show highlighted text and repository labels in copilotview's local web interface.">
-            <div aria-hidden="true">
-              <div class="preview-header">
-                <span class="preview-brand">copilotview</span>
-                <span class="preview-tabs"><span class="preview-tab-current">Sessions</span><span>Statistics</span><span>Trends</span></span>
+          <div class="app-preview">
+            <div class="preview-header">
+              <span class="preview-brand" aria-hidden="true">copilotview</span>
+              <div class="preview-tabs" role="radiogroup" aria-label="Example screen">
+                <label class="preview-tab"><input class="visually-hidden" type="radio" name="preview-view" value="sessions" checked>Sessions</label>
+                <label class="preview-tab"><input class="visually-hidden" type="radio" name="preview-view" value="statistics">Statistics</label>
+                <label class="preview-tab"><input class="visually-hidden" type="radio" name="preview-view" value="trends">Trends</label>
               </div>
-              <div class="preview-body">
-                <div class="preview-search">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.25"/><path d="m12.5 12.5 4 4"/></svg>
-                  <span>retry</span>
+            </div>
+            <div class="preview-views">
+              <div class="preview-view preview-sessions" role="img" aria-label="Illustrative search results for retry. Two matching conversations show highlighted text and repository labels in copilotview's local web interface.">
+                <div class="preview-body" aria-hidden="true">
+                  <div class="preview-search">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.25"/><path d="m12.5 12.5 4 4"/></svg>
+                    <span>retry</span>
+                  </div>
+                  <div class="preview-filters"><span>All content</span><span>All repositories</span><span>All time</span></div>
+                  <p class="preview-count">2 matches</p>
+                  <div class="preview-result">
+                    <p class="preview-title">Handle intermittent API failures</p>
+                    <div class="preview-meta"><span class="preview-role">Copilot</span><span>example/api</span><span>Oct 12</span></div>
+                    <p class="preview-snippet">The client will <mark>retry</mark> the request with exponential backoff, up to three attempts.</p>
+                  </div>
+                  <div class="preview-result">
+                    <p class="preview-title">Make the background worker resilient</p>
+                    <div class="preview-meta"><span class="preview-role preview-role-user">Me</span><span>example/worker</span><span>Oct 10</span></div>
+                    <p class="preview-snippet">Keep the failed job in the queue so we can <mark>retry</mark> it without losing the original payload.</p>
+                  </div>
                 </div>
-                <div class="preview-filters"><span>All content</span><span>All repositories</span><span>All time</span></div>
-                <p class="preview-count">2 matches</p>
-                <div class="preview-result">
-                  <p class="preview-title">Handle intermittent API failures</p>
-                  <div class="preview-meta"><span class="preview-role">Copilot</span><span>example/api</span><span>Oct 12</span></div>
-                  <p class="preview-snippet">The client will <mark>retry</mark> the request with exponential backoff, up to three attempts.</p>
+              </div>
+
+              <div class="preview-view preview-statistics" role="img" aria-label="Illustrative statistics for 128 sessions. Totals of messages, tool calls, AI credits, input tokens, and lines added sit above bar charts of sessions by repository and calls by tool.">
+                <div class="preview-body" aria-hidden="true">
+                  <p class="preview-count">Statistics for the complete index</p>
+                  <div class="preview-stats">
+                    <p><strong>128</strong>Sessions</p>
+                    <p><strong>3,942</strong>Messages</p>
+                    <p><strong>9,316</strong>Tool calls</p>
+                    <p><strong>8,742.6</strong>AI credits</p>
+                    <p><strong>96.4M</strong>Input tokens (89% cached)</p>
+                    <p><strong>+18,240</strong>Lines added</p>
+                  </div>
+                  <div class="preview-columns">
+                    <div>
+                      <p class="preview-heading">Repositories</p>
+                      <div class="preview-bar"><span>example/api</span><span class="preview-track"><span style="width: 100%"></span></span><span>46</span></div>
+                      <div class="preview-bar"><span>example/worker</span><span class="preview-track"><span style="width: 83%"></span></span><span>38</span></div>
+                      <div class="preview-bar"><span>example/web</span><span class="preview-track"><span style="width: 59%"></span></span><span>27</span></div>
+                    </div>
+                    <div>
+                      <p class="preview-heading">Tools</p>
+                      <div class="preview-bar"><span>bash</span><span class="preview-track"><span style="width: 100%"></span></span><span>3,208</span></div>
+                      <div class="preview-bar"><span>view</span><span class="preview-track"><span style="width: 83%"></span></span><span>2,664</span></div>
+                      <div class="preview-bar"><span>edit</span><span class="preview-track"><span style="width: 49%"></span></span><span>1,571</span></div>
+                    </div>
+                    <div class="preview-wide">
+                      <p class="preview-heading">Median tool duration</p>
+                      <div class="preview-bar"><span>bash</span><span class="preview-track"><span style="width: 100%"></span></span><span>2.4 s</span></div>
+                      <div class="preview-bar"><span>grep</span><span class="preview-track"><span style="width: 13%"></span></span><span>310 ms</span></div>
+                      <div class="preview-bar"><span>view</span><span class="preview-track"><span style="width: 4%"></span></span><span>95 ms</span></div>
+                    </div>
+                    <div class="preview-wide">
+                      <p class="preview-heading">Branches</p>
+                      <div class="preview-bar"><span>main</span><span class="preview-track"><span style="width: 100%"></span></span><span>52</span></div>
+                      <div class="preview-bar"><span>retry-backoff</span><span class="preview-track"><span style="width: 33%"></span></span><span>17</span></div>
+                      <div class="preview-bar"><span>worker-queue</span><span class="preview-track"><span style="width: 21%"></span></span><span>11</span></div>
+                    </div>
+                  </div>
                 </div>
-                <div class="preview-result">
-                  <p class="preview-title">Make the background worker resilient</p>
-                  <div class="preview-meta"><span class="preview-role preview-role-user">Me</span><span>example/worker</span><span>Oct 10</span></div>
-                  <p class="preview-snippet">Keep the failed job in the queue so we can <mark>retry</mark> it without losing the original payload.</p>
+              </div>
+
+              <div class="preview-view preview-trends" role="img" aria-label="Illustrative trends for the past 30 days. Daily bar charts of AI credits, active sessions, and messages rise on weekdays and fall on weekends, beside the totals for the period.">
+                <div class="preview-body" aria-hidden="true">
+                  <div class="preview-toolbar">
+                    <p class="preview-count">Trends for the past 30 days, by day</p>
+                    <span class="preview-segmented"><span class="preview-pressed">Auto</span><span>Hour</span><span>Day</span><span>Week</span><span>Month</span></span>
+                  </div>
+                  <div class="preview-trends-layout">
+                    <div class="preview-charts">
+                      <div class="preview-chart">
+                        <p class="preview-heading">AI credits</p>
+                        <span class="preview-chart-max">200</span>
+                        <svg viewBox="0 0 30 100" preserveAspectRatio="none">
+                          <line class="preview-gridline" x1="0" x2="30" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
+                          <g class="preview-chart-bars"><rect x="0.125" y="93.8" width="0.75" height="6.2"/><rect x="2.125" y="60.7" width="0.75" height="39.3"/><rect x="3.125" y="51.9" width="0.75" height="48.1"/><rect x="4.125" y="43.6" width="0.75" height="56.4"/><rect x="5.125" y="55.9" width="0.75" height="44.1"/><rect x="6.125" y="67.8" width="0.75" height="32.2"/><rect x="7.125" y="90.6" width="0.75" height="9.4"/><rect x="8.125" y="96.9" width="0.75" height="3.1"/><rect x="9.125" y="53.7" width="0.75" height="46.3"/><rect x="10.125" y="39.3" width="0.75" height="60.7"/><rect x="11.125" y="47.5" width="0.75" height="52.5"/><rect x="12.125" y="34.2" width="0.75" height="65.8"/><rect x="13.125" y="63.6" width="0.75" height="36.4"/><rect x="15.125" y="87.8" width="0.75" height="12.2"/><rect x="16.125" y="56.6" width="0.75" height="43.4"/><rect x="17.125" y="45.4" width="0.75" height="54.6"/><rect x="18.125" y="28.7" width="0.75" height="71.3"/><rect x="19.125" y="40.8" width="0.75" height="59.2"/><rect x="20.125" y="59.2" width="0.75" height="40.8"/><rect x="21.125" y="95.1" width="0.75" height="4.9"/><rect x="23.125" y="51.3" width="0.75" height="48.7"/><rect x="24.125" y="36.5" width="0.75" height="63.5"/><rect x="25.125" y="42.4" width="0.75" height="57.6"/><rect x="26.125" y="48.1" width="0.75" height="51.9"/><rect x="27.125" y="65.3" width="0.75" height="34.7"/><rect x="28.125" y="92.4" width="0.75" height="7.6"/><rect x="29.125" y="97.7" width="0.75" height="2.3"/></g>
+                          <line class="preview-baseline" x1="0" x2="30" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
+                        </svg>
+                      </div>
+                      <div class="preview-chart">
+                        <p class="preview-heading">Active sessions</p>
+                        <span class="preview-chart-max">10</span>
+                        <svg viewBox="0 0 30 100" preserveAspectRatio="none">
+                          <line class="preview-gridline" x1="0" x2="30" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
+                          <g class="preview-chart-bars"><rect x="0.125" y="90" width="0.75" height="10"/><rect x="2.125" y="50" width="0.75" height="50"/><rect x="3.125" y="40" width="0.75" height="60"/><rect x="4.125" y="30" width="0.75" height="70"/><rect x="5.125" y="40" width="0.75" height="60"/><rect x="6.125" y="60" width="0.75" height="40"/><rect x="7.125" y="80" width="0.75" height="20"/><rect x="8.125" y="90" width="0.75" height="10"/><rect x="9.125" y="40" width="0.75" height="60"/><rect x="10.125" y="20" width="0.75" height="80"/><rect x="11.125" y="30" width="0.75" height="70"/><rect x="12.125" y="20" width="0.75" height="80"/><rect x="13.125" y="50" width="0.75" height="50"/><rect x="15.125" y="80" width="0.75" height="20"/><rect x="16.125" y="40" width="0.75" height="60"/><rect x="17.125" y="30" width="0.75" height="70"/><rect x="18.125" y="10" width="0.75" height="90"/><rect x="19.125" y="30" width="0.75" height="70"/><rect x="20.125" y="50" width="0.75" height="50"/><rect x="21.125" y="90" width="0.75" height="10"/><rect x="23.125" y="40" width="0.75" height="60"/><rect x="24.125" y="20" width="0.75" height="80"/><rect x="25.125" y="30" width="0.75" height="70"/><rect x="26.125" y="30" width="0.75" height="70"/><rect x="27.125" y="60" width="0.75" height="40"/><rect x="28.125" y="90" width="0.75" height="10"/><rect x="29.125" y="90" width="0.75" height="10"/></g>
+                          <line class="preview-baseline" x1="0" x2="30" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
+                        </svg>
+                      </div>
+                      <div class="preview-chart">
+                        <p class="preview-heading">Messages</p>
+                        <span class="preview-chart-max">100</span>
+                        <svg viewBox="0 0 30 100" preserveAspectRatio="none">
+                          <line class="preview-gridline" x1="0" x2="30" y1="0" y2="0" vector-effect="non-scaling-stroke"/>
+                          <g class="preview-chart-bars"><rect x="0.125" y="92" width="0.75" height="8"/><rect x="2.125" y="59" width="0.75" height="41"/><rect x="3.125" y="48" width="0.75" height="52"/><rect x="4.125" y="39" width="0.75" height="61"/><rect x="5.125" y="53" width="0.75" height="47"/><rect x="6.125" y="65" width="0.75" height="35"/><rect x="7.125" y="88" width="0.75" height="12"/><rect x="8.125" y="96" width="0.75" height="4"/><rect x="9.125" y="51" width="0.75" height="49"/><rect x="10.125" y="34" width="0.75" height="66"/><rect x="11.125" y="45" width="0.75" height="55"/><rect x="12.125" y="28" width="0.75" height="72"/><rect x="13.125" y="62" width="0.75" height="38"/><rect x="15.125" y="86" width="0.75" height="14"/><rect x="16.125" y="55" width="0.75" height="45"/><rect x="17.125" y="42" width="0.75" height="58"/><rect x="18.125" y="21" width="0.75" height="79"/><rect x="19.125" y="37" width="0.75" height="63"/><rect x="20.125" y="58" width="0.75" height="42"/><rect x="21.125" y="94" width="0.75" height="6"/><rect x="23.125" y="49" width="0.75" height="51"/><rect x="24.125" y="31" width="0.75" height="69"/><rect x="25.125" y="40" width="0.75" height="60"/><rect x="26.125" y="44" width="0.75" height="56"/><rect x="27.125" y="63" width="0.75" height="37"/><rect x="28.125" y="91" width="0.75" height="9"/><rect x="29.125" y="97" width="0.75" height="3"/></g>
+                          <line class="preview-baseline" x1="0" x2="30" y1="100" y2="100" vector-effect="non-scaling-stroke"/>
+                        </svg>
+                      </div>
+                      <div class="preview-axis"><span>Oct 3</span><span>Oct 13</span><span>Oct 23</span><span>Nov 1</span></div>
+                    </div>
+                    <div class="preview-readout">
+                      <p class="preview-readout-span">Oct 3 &ndash; Nov 1</p>
+                      <dl>
+                        <dt>AI credits</dt><dd>2,105.2</dd>
+                        <dt>Requests</dt><dd>1,021</dd>
+                        <dt>Active sessions</dt><dd>41</dd>
+                        <dt>Messages</dt><dd>1,132</dd>
+                        <dt class="preview-readout-detail">From you</dt><dd class="preview-readout-detail">147</dd>
+                        <dt class="preview-readout-detail">From Copilot</dt><dd class="preview-readout-detail">985</dd>
+                      </dl>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <figcaption>Illustrative example &mdash; find the conversation, not just the file.</figcaption>
+          <figcaption>
+            <span class="preview-caption preview-sessions">Illustrative example &mdash; find the conversation, not just the file.</span>
+            <span class="preview-caption preview-statistics">Illustrative example &mdash; see what your sessions add up to.</span>
+            <span class="preview-caption preview-trends">Illustrative example &mdash; see how your usage changes over time.</span>
+          </figcaption>
         </figure>
       </section>
 
