@@ -152,6 +152,8 @@ export interface TrendBucket extends TrendCounts {
 
 export interface Trends {
   interval: TrendInterval;
+  /** The intervals the period can be charted by, finest first; empty when there is nothing to chart. */
+  intervals: TrendInterval[];
   timeZone: string;
   buckets: TrendBucket[];
   /** Counts each session once, however many buckets it was active in. */

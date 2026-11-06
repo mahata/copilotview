@@ -14,13 +14,12 @@ import { formatAiCredits, formatCount } from "./ui";
 
 export type IntervalChoice = TrendInterval | "auto";
 
-const INTERVAL_CHOICES: { value: IntervalChoice; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "hour", label: "Hour" },
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-];
+const INTERVAL_LABELS: Record<TrendInterval, string> = {
+  hour: "Hourly",
+  day: "Daily",
+  week: "Weekly",
+  month: "Monthly",
+};
 
 /** The narrowest space an axis label of each interval needs, in pixels. */
 const AXIS_LABEL_SPACING: Record<TrendInterval, number> = { hour: 104, day: 64, week: 64, month: 80 };
@@ -228,12 +227,20 @@ function Readout({ trends, selected }: { trends: Trends; selected: number | null
   );
 }
 
-function IntervalSwitch({ value, onChange }: { value: IntervalChoice; onChange: (value: IntervalChoice) => void }) {
+function IntervalSwitch({
+  intervals,
+  value,
+  onChange,
+}: {
+  intervals: TrendInterval[];
+  value: TrendInterval;
+  onChange: (value: TrendInterval) => void;
+}) {
   return (
     <div className="segmented" role="group" aria-label="Interval">
-      {INTERVAL_CHOICES.map((choice) => (
-        <button key={choice.value} type="button" aria-pressed={value === choice.value} onClick={() => onChange(choice.value)}>
-          {choice.label}
+      {intervals.map((interval) => (
+        <button key={interval} type="button" aria-pressed={value === interval} onClick={() => onChange(interval)}>
+          {INTERVAL_LABELS[interval]}
         </button>
       ))}
     </div>
@@ -246,7 +253,7 @@ export function TrendsView({
   periodTo,
   interval,
   onIntervalChange,
-}: PeriodSelection & { interval: IntervalChoice; onIntervalChange: (interval: IntervalChoice) => void }) {
+}: PeriodSelection & { interval: IntervalChoice; onIntervalChange: (interval: TrendInterval) => void }) {
   const [trends, setTrends] = useState<Trends | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -303,7 +310,6 @@ export function TrendsView({
   const selection = { period, periodFrom, periodTo };
   const describedPeriod = describePeriod(selection);
   const coversWholeIndex = Object.values(periodRange(selection, Date.now())).every((bound) => bound === undefined);
-  const coarsened = trends !== null && interval !== "auto" && trends.interval !== interval;
   const hasActivity = trends !== null && trends.totals.sessions > 0;
 
   let content: ReactNode;
@@ -366,13 +372,10 @@ export function TrendsView({
           Trends {describedPeriod}
           {trends && hasActivity && `, by ${trends.interval}`}
         </div>
-        <IntervalSwitch value={interval} onChange={onIntervalChange} />
+        {trends && hasActivity && trends.intervals.length > 1 && (
+          <IntervalSwitch intervals={trends.intervals} value={trends.interval} onChange={onIntervalChange} />
+        )}
       </div>
-      {coarsened && hasActivity && (
-        <div className="hint trends__hint">
-          There are too many {interval}s in this period to chart, so it's shown by {trends.interval}.
-        </div>
-      )}
       {content}
     </>
   );
