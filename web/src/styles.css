@@ -465,15 +465,13 @@ pre.body {
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
+  /* As tall as the interval switch, so the charts stay put when it's hidden. */
+  min-height: 32px;
   margin: 18px 0 14px;
 }
 
 .trends-toolbar .result-count {
   margin: 0;
-}
-
-.trends__hint {
-  margin: -6px 0 14px;
 }
 
 .segmented {

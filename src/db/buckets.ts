@@ -5,7 +5,7 @@ export type TrendInterval = (typeof TREND_INTERVALS)[number];
 /** Auto picks the finest interval that charts the range in at most this many buckets. */
 export const AUTO_MAX_BUCKETS = 100;
 
-/** A requested interval that needs more buckets than this gives way to the next coarser one. */
+/** No interval that needs more buckets than this is offered. */
 export const MAX_BUCKETS = 400;
 
 const MINUTE_MS = 60 * 1000;
@@ -28,12 +28,36 @@ export function fitsInChart(first: number, last: number, interval: TrendInterval
   return estimatedBucketCount(first, last, interval) <= MAX_BUCKETS;
 }
 
-export function chooseInterval(first: number, last: number, requested: TrendInterval | "auto"): TrendInterval {
-  if (requested !== "auto") {
-    const candidates = TREND_INTERVALS.slice(TREND_INTERVALS.indexOf(requested));
-    return candidates.find((interval) => fitsInChart(first, last, interval)) ?? "month";
-  }
+function autoInterval(first: number, last: number): TrendInterval {
   return TREND_INTERVALS.find((interval) => estimatedBucketCount(first, last, interval) <= AUTO_MAX_BUCKETS) ?? "month";
+}
+
+/**
+ * Only intervals that fit into a range at least about this many times are
+ * offered for it. It is just under two because two whole months or days can be
+ * shorter than twice their typical length, for example February and March,
+ * or two days when clocks spring forward.
+ */
+const MIN_INTERVALS_PER_RANGE = 1.9;
+
+/**
+ * The intervals offered for charting the range, finest first: those that fit
+ * into it at least twice and need at most MAX_BUCKETS buckets. Buckets are
+ * whole, so a longer interval would chart far more than the range. When no
+ * interval qualifies, only Auto's.
+ */
+export function availableIntervals(first: number, last: number): TrendInterval[] {
+  const intervals = TREND_INTERVALS.filter(
+    (interval) =>
+      MIN_INTERVALS_PER_RANGE * TYPICAL_LENGTH_MS[interval] <= last - first && fitsInChart(first, last, interval),
+  );
+  return intervals.length > 0 ? intervals : [autoInterval(first, last)];
+}
+
+/** The requested interval if the range offers it, and otherwise Auto's, which it always offers. */
+export function chooseInterval(first: number, last: number, requested: TrendInterval | "auto"): TrendInterval {
+  if (requested !== "auto" && availableIntervals(first, last).includes(requested)) return requested;
+  return autoInterval(first, last);
 }
 
 /** The requested IANA time zone in its canonical form, or the local one when the name is missing or unknown. */

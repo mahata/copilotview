@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bucketBoundaries, chooseInterval, resolveTimeZone, type TrendInterval } from "../src/db/buckets";
+import {
+  availableIntervals,
+  bucketBoundaries,
+  chooseInterval,
+  resolveTimeZone,
+  type TrendInterval,
+} from "../src/db/buckets";
 
 function boundaries(first: string, last: string, interval: TrendInterval, timeZone: string): string[] {
   return bucketBoundaries(Date.parse(first), Date.parse(last), interval, timeZone).map((time) =>
@@ -80,6 +86,40 @@ describe("bucketBoundaries", () => {
   });
 });
 
+describe("availableIntervals", () => {
+  const now = Date.parse("2026-11-01T12:00:00.000Z");
+  const daysAgo = (days: number) => now - days * 24 * 60 * 60 * 1000;
+
+  it("offers the intervals that fit into the range at least twice and chart it in at most 400 buckets", () => {
+    expect(availableIntervals(daysAgo(1), now)).toEqual(["hour"]);
+    expect(availableIntervals(daysAgo(7), now)).toEqual(["hour", "day"]);
+    expect(availableIntervals(daysAgo(30), now)).toEqual(["day", "week"]);
+    expect(availableIntervals(daysAgo(90), now)).toEqual(["day", "week", "month"]);
+    expect(availableIntervals(daysAgo(365), now)).toEqual(["day", "week", "month"]);
+    expect(availableIntervals(daysAgo(3 * 365), now)).toEqual(["week", "month"]);
+  });
+
+  it("offers the same intervals for a preset period when the request reaches the server a moment later", () => {
+    const later = now + 5000;
+    expect(availableIntervals(daysAgo(1), later)).toEqual(["hour"]);
+    expect(availableIntervals(daysAgo(7), later)).toEqual(["hour", "day"]);
+    expect(availableIntervals(daysAgo(30), later)).toEqual(["day", "week"]);
+  });
+
+  it("counts two whole days or months as twice the interval, however long they are", () => {
+    // March 8 and 9 in New York, where clocks spring forward on the 8th, and February and March in Tokyo, 59 days in all.
+    const twoDays = [Date.parse("2026-03-08T05:00:00.000Z"), Date.parse("2026-03-10T03:59:59.999Z")] as const;
+    const twoMonths = [Date.parse("2026-01-31T15:00:00.000Z"), Date.parse("2026-03-31T14:59:59.999Z")] as const;
+    expect(availableIntervals(...twoDays)).toEqual(["hour", "day"]);
+    expect(availableIntervals(...twoMonths)).toEqual(["day", "week", "month"]);
+  });
+
+  it("offers only Auto's interval when no interval qualifies", () => {
+    expect(availableIntervals(now - 30 * 60 * 1000, now)).toEqual(["hour"]);
+    expect(availableIntervals(daysAgo(100 * 365), now)).toEqual(["month"]);
+  });
+});
+
 describe("chooseInterval", () => {
   const now = Date.parse("2026-11-01T12:00:00.000Z");
   const daysAgo = (days: number) => now - days * 24 * 60 * 60 * 1000;
@@ -92,13 +132,19 @@ describe("chooseInterval", () => {
     expect(chooseInterval(daysAgo(3 * 365), now, "auto")).toBe("month");
   });
 
-  it("keeps a requested interval unless the range needs more than 400 of its buckets", () => {
+  it("keeps a requested interval that the range offers", () => {
     expect(chooseInterval(daysAgo(7), now, "hour")).toBe("hour");
-    expect(chooseInterval(daysAgo(30), now, "hour")).toBe("day");
+    expect(chooseInterval(daysAgo(30), now, "week")).toBe("week");
     expect(chooseInterval(daysAgo(365), now, "day")).toBe("day");
-    expect(chooseInterval(daysAgo(2 * 365), now, "day")).toBe("week");
-    expect(chooseInterval(daysAgo(1), now, "month")).toBe("month");
     expect(chooseInterval(daysAgo(100 * 365), now, "month")).toBe("month");
+  });
+
+  it("picks Auto's interval instead of one too fine or too long for the range", () => {
+    expect(chooseInterval(daysAgo(30), now, "hour")).toBe("day");
+    expect(chooseInterval(daysAgo(2 * 365), now, "day")).toBe("month");
+    expect(chooseInterval(daysAgo(1), now, "day")).toBe("hour");
+    expect(chooseInterval(daysAgo(7), now, "week")).toBe("day");
+    expect(chooseInterval(daysAgo(7), now, "month")).toBe("day");
   });
 });
 

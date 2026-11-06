@@ -81,6 +81,8 @@ export function App() {
 
   const updatePeriod = (patch: Partial<Pick<Filters, "period" | "periodFrom" | "periodTo">>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
+    // Each period starts at its own default interval; the one chosen for the last may not fit.
+    setTrendInterval("auto");
     if (route.view === "session") go("/");
   };
 
