@@ -1,6 +1,13 @@
 import type { Database } from "./sqlite";
 import { NO_MODEL } from "./activity";
-import { bucketBoundaries, chooseInterval, fitsInChart, resolveTimeZone, type TrendInterval } from "./buckets";
+import {
+  availableIntervals,
+  bucketBoundaries,
+  chooseInterval,
+  fitsInChart,
+  resolveTimeZone,
+  type TrendInterval,
+} from "./buckets";
 
 export type { TrendInterval };
 
@@ -31,6 +38,8 @@ export interface TrendBucket extends TrendCounts {
 
 export interface Trends {
   interval: TrendInterval;
+  /** The intervals the period can be charted by, finest first; empty when there is nothing to chart. */
+  intervals: TrendInterval[];
   timeZone: string;
   buckets: TrendBucket[];
   /** Counts each session once, however many buckets it was active in. */
@@ -108,7 +117,6 @@ function parseTime(value: string | undefined): number | undefined {
 interface ChartRange {
   first: number;
   last: number;
-  interval: TrendInterval;
 }
 
 /**
@@ -116,7 +124,7 @@ interface ChartRange {
  * A period too long to chart even by month starts at the first activity too,
  * and without any activity has nothing to chart.
  */
-function chartRange(db: Database, options: TrendOptions, requested: TrendInterval | "auto"): ChartRange | null {
+function chartRange(db: Database, options: TrendOptions): ChartRange | null {
   const row = db.prepare("SELECT MIN(slot_start) AS first FROM activity_slots").get() as Row;
   const firstActivity = row.first === null || row.first === undefined ? undefined : Number(row.first);
   const now = options.now ?? Date.now();
@@ -124,31 +132,34 @@ function chartRange(db: Database, options: TrendOptions, requested: TrendInterva
   let first = parseTime(options.from) ?? firstActivity;
   if (first === undefined) return null;
 
-  let interval = chooseInterval(first, last, requested);
-  if (!fitsInChart(first, last, interval)) {
+  if (!fitsInChart(first, last, "month")) {
     if (firstActivity === undefined) return null;
-    if (firstActivity > first) {
-      first = firstActivity;
-      interval = chooseInterval(first, last, requested);
-    }
+    first = Math.max(first, firstActivity);
   }
-  return first <= last ? { first, last, interval } : null;
+  return first <= last ? { first, last } : null;
 }
 
 /**
  * Totals activity by hour, day, week, or month in `timeZone`. The first and
  * last buckets are whole, so they can include activity from just outside the
- * period.
+ * period. An interval the period doesn't offer gives way to Auto's.
  */
 export function getTrends(db: Database, options: TrendOptions = {}): Trends {
   const timeZone = resolveTimeZone(options.timeZone);
   const requested = options.interval ?? "auto";
-  const range = chartRange(db, options, requested);
+  const range = chartRange(db, options);
   if (!range) {
-    return { interval: requested === "auto" ? "day" : requested, timeZone, buckets: [], totals: NO_COUNTS };
+    return {
+      interval: requested === "auto" ? "day" : requested,
+      intervals: [],
+      timeZone,
+      buckets: [],
+      totals: NO_COUNTS,
+    };
   }
 
-  const boundaries = bucketBoundaries(range.first, range.last, range.interval, timeZone);
+  const interval = chooseInterval(range.first, range.last, requested);
+  const boundaries = bucketBoundaries(range.first, range.last, interval, timeZone);
   const bucketRanges = JSON.stringify(boundaries.slice(0, -1).map((start, index) => [start, boundaries[index + 1]]));
 
   const countsByBucket = new Map(
@@ -188,7 +199,8 @@ export function getTrends(db: Database, options: TrendOptions = {}): Trends {
   );
 
   return {
-    interval: range.interval,
+    interval,
+    intervals: availableIntervals(range.first, range.last),
     timeZone,
     buckets: boundaries.slice(0, -1).map((start, index) => ({
       start: new Date(start).toISOString(),

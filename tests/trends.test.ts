@@ -129,6 +129,7 @@ describe("trends", () => {
       getTrends(db, { ...firstThreeDaysOfOctober, interval: "day", timeZone: TOKYO, now: afterOctober }),
     ).toEqual({
       interval: "day",
+      intervals: ["hour", "day"],
       timeZone: TOKYO,
       buckets: [october1, october2, october3],
       totals: {
@@ -156,14 +157,14 @@ describe("trends", () => {
 
   it("counts whole buckets at both ends of a period that starts and ends partway through them", () => {
     const trends = getTrends(db, {
-      from: "2026-10-01T06:00:00.000Z",
-      to: "2026-10-02T06:00:00.000Z",
+      from: "2026-10-01T00:02:00.000Z",
+      to: "2026-10-03T01:30:00.000Z",
       interval: "day",
       timeZone: TOKYO,
       now: afterOctober,
     });
 
-    expect(trends.buckets).toEqual([october1, october2]);
+    expect(trends.buckets).toEqual([october1, october2, october3]);
   });
 
   it("splits days in the requested time zone", () => {
@@ -189,14 +190,41 @@ describe("trends", () => {
     ]);
   });
 
-  it("picks an interval from the length of the period and reports a coarser one it had to use", () => {
+  it("picks an interval from the length of the period", () => {
     const now = Date.parse("2026-10-03T00:00:00.000Z");
     const daysBefore = (days: number) => new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
 
     expect(getTrends(db, { from: daysBefore(1), timeZone: TOKYO, now }).interval).toBe("hour");
     expect(getTrends(db, { from: daysBefore(2), interval: "auto", timeZone: TOKYO, now }).buckets).toHaveLength(49);
     expect(getTrends(db, { from: daysBefore(7), interval: "auto", timeZone: TOKYO, now }).interval).toBe("day");
-    expect(getTrends(db, { from: daysBefore(30), interval: "hour", timeZone: TOKYO, now }).interval).toBe("day");
+  });
+
+  it("offers the intervals that fit into the period at least twice, and picks Auto's instead of one it doesn't offer", () => {
+    const now = Date.parse("2026-10-03T00:00:00.000Z");
+    const daysBefore = (days: number) => new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+
+    expect(getTrends(db, { from: daysBefore(7), interval: "hour", timeZone: TOKYO, now })).toMatchObject({
+      interval: "hour",
+      intervals: ["hour", "day"],
+    });
+    expect(getTrends(db, { from: daysBefore(7), interval: "month", timeZone: TOKYO, now })).toMatchObject({
+      interval: "day",
+      intervals: ["hour", "day"],
+    });
+    expect(getTrends(db, { from: daysBefore(30), interval: "hour", timeZone: TOKYO, now })).toMatchObject({
+      interval: "day",
+      intervals: ["day", "week"],
+    });
+  });
+
+  it("offers intervals by the time since the first activity when the period has no start", () => {
+    expect(getTrends(db, { interval: "month", timeZone: TOKYO, now: afterOctober })).toMatchObject({
+      interval: "day",
+      intervals: ["day", "week"],
+    });
+    expect(
+      getTrends(db, { interval: "month", timeZone: TOKYO, now: Date.parse("2026-12-15T00:00:00.000Z") }),
+    ).toMatchObject({ interval: "month", intervals: ["day", "week", "month"] });
   });
 
   it("counts nothing in buckets without activity", () => {
@@ -222,6 +250,7 @@ describe("trends", () => {
       }),
     ).toEqual({
       interval: "week",
+      intervals: ["hour", "day", "week"],
       timeZone: TOKYO,
       buckets: [
         weekOf("2025-12-28T15:00:00.000Z", "2026-01-04T15:00:00.000Z"),
@@ -260,7 +289,7 @@ describe("trends", () => {
 describe("trends of usage recorded without requests or AI credits", () => {
   let root: string;
   let db: Database;
-  const october5 = { from: "2026-10-05T00:00:00.000Z", to: "2026-10-05T23:59:59.999Z" };
+  const fifthAndSixthOfOctober = { from: "2026-10-05T00:00:00.000Z", to: "2026-10-06T23:59:59.999Z" };
 
   beforeAll(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "copilotview-trends-tokens-test-"));
@@ -288,12 +317,13 @@ describe("trends of usage recorded without requests or AI credits", () => {
   });
 
   it("leaves AI credits unrecorded, as the statistics do", () => {
-    const trends = getTrends(db, { ...october5, interval: "day", timeZone: "UTC", now: afterOctober });
+    const trends = getTrends(db, { ...fifthAndSixthOfOctober, interval: "day", timeZone: "UTC", now: afterOctober });
 
-    expect(getStats(db, october5).usage.aiCredits).toBeNull();
+    expect(getStats(db, fifthAndSixthOfOctober).usage.aiCredits).toBeNull();
     expect(trends.totals.aiCredits).toBeNull();
     expect(trends.buckets).toMatchObject([
       { aiCredits: null, models: [{ model: "gpt-5", requests: 0, aiCredits: null, requestsWithoutAiCredits: 0 }] },
+      { aiCredits: 0, models: [] },
     ]);
   });
 });
@@ -310,7 +340,7 @@ describe("trends of an empty index", () => {
   });
 
   it("returns no buckets", () => {
-    expect(getTrends(db, { timeZone: TOKYO })).toMatchObject({ interval: "day", buckets: [] });
+    expect(getTrends(db, { timeZone: TOKYO })).toMatchObject({ interval: "day", intervals: [], buckets: [] });
   });
 
   it("returns no buckets for a period too long to chart, rather than thousands of empty ones", () => {
