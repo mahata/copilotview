@@ -27,7 +27,7 @@
     "lint": "oxlint src web tests"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "hono": "^4.13.14",
     "yaml": "^2.6.1"
   },
